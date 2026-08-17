@@ -1,0 +1,90 @@
+# {{.id}}{{if .title}} - {{.title}}{{end}}
+{{- if .alias}} (aka {{join ", " .alias}}){{end}}
+
+{{- if .severity }}
+- Severity:  {{.severity | severity}} ({{printf "%.1f" .score}}){{if .cisa_kev}}  🔥 **KNOWN EXPLOITED**{{end}}
+{{- end}}
+- Status:    {{.status}}{{if .nvd_status}} (NVD: {{.nvd_status}}){{end}}
+- Published: {{.published}}
+- Modified:  {{.modified}}
+{{- with .epss}}
+- EPSS:      {{printf "%.2f" (mulf 100 .score)}}% (percentile {{printf "%.0f" (mulf 100 .percentile)}})
+{{- end}}
+
+## Description
+
+{{- $lines := list -}}
+{{- range splitList "\n" .description -}}
+  {{- if gt (len .) 80 -}}
+    {{- $lines = append $lines (wrap 80 .) -}}
+  {{- else -}}
+    {{- $lines = append $lines . -}}
+  {{- end -}}
+{{- end }}
+{{ join "\n" $lines }}
+
+{{- if or .metrics.cvss4 .metrics.cvss3 .metrics.cvss2}}
+
+## Metrics
+
+| Version | Score | Severity | Vector String |
+|---------|-------|----------|---------------|
+{{- with .metrics.cvss4}}
+| CVSS v{{.version}} | {{printf "%.1f" .base_score}} | {{.base_severity}} | {{.vector_string}} |{{end}}
+{{- with .metrics.cvss3}}
+| CVSS v{{.version}} | {{printf "%.1f" .base_score}} | {{.base_severity}} | {{.vector_string}} |{{end}}
+{{- with .metrics.cvss2}}
+| CVSS v{{.version}} | {{printf "%.1f" .base_score}} | {{.base_severity}} | {{.vector_string}} |{{end}}
+{{- end}}
+
+{{- if .metrics.ssvc }}
+
+### SSVC
+
+- Automatable: {{ .metrics.ssvc.automatable }}
+- Exploitation: {{ .metrics.ssvc.exploitation }}
+- Technical Impact: {{ .metrics.ssvc.technical_impact }}
+
+{{- end}}
+
+{{- if .weaknesses}}
+
+## Weaknesses
+{{- range .weaknesses}}
+  - {{.id}}: {{wrap 76 .name | indent 2 | trimPrefix "  "}}
+{{- end}}
+{{- end}}
+{{- with .cisa_kev}}
+
+## 🔥 CISA KEV
+- Added {{.added_date}}, due {{.due_date}}
+- Ransomware use: {{if eq .known_ransomware_campaign_use "Known"}}☠️ {{end}}{{.known_ransomware_campaign_use}}
+- Action: {{wrap 76 .required_action | indent 2 | trimPrefix "  "}}
+{{- end}}
+{{- if .advisories}}
+
+## Affected Products
+{{.affected_total}} product(s) across {{len .affected_vendors_summary}} vendor(s) affected{{if .not_affected_total}} ({{.not_affected_total}} explicitly confirmed NOT affected){{end}}:
+{{- range .affected_vendors_summary}}
+  - {{.Vendor}}: {{.Count}}
+{{- end}}
+{{- end}}
+{{- with .exploit_maturity}}
+
+## Exploit Maturity
+- Score: {{.score}}/{{.max}}{{if .sources}} (sources: {{join ", " .sources}}){{end}}
+{{- end}}
+{{- if .advisories}}
+
+## Advisories
+{{- range .advisories}}
+- **{{.id}}**: {{wrap 76 .title | indent 4 | trimPrefix "    "}} {{if .severity}}- {{.severity | upper}}{{end}}
+{{- end}}
+{{- end}}
+{{- if .sightings}}
+
+## Sightings
+{{- range .sightings}}
+  - {{.source}}: {{.title}} ({{.date}})
+{{- end}}
+{{- end}}

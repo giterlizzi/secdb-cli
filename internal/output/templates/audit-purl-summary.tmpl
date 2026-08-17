@@ -1,0 +1,7 @@
+# PURL Audit - Summary
+
+| Package | CVEs | Advisories | Max Severity |
+|---|---|---|---|
+{{- range .}}
+| {{.Package}} | {{len .CVEs}} | {{.AdvisoryCount}} | {{.MaxSeverity | severity}} |
+{{- end}}

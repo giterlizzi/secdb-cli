@@ -1,0 +1,8 @@
+
+# PURL Audit - Details
+ 
+| ID | Title | Severity | Packages | CVEs |
+|---|---|---|---|---|
+{{- range .}}
+| {{.ID}} | {{.Title | replace "|" "\\|"}} | {{.Severity | severity}} | {{join ", " .Packages}} | {{join ", " .CVEs}} |
+{{- end}}

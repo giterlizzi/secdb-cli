@@ -1,0 +1,42 @@
+version: 2
+
+project_name: secdb-cli
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: secdb
+    main: .
+    binary: secdb
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w
+      - -X github.com/giterlizzi/secdb-cli/internal/meta.Version={{.Tag}}
+      - -X github.com/giterlizzi/secdb-cli/internal/meta.CommitHash={{.Commit}}
+      - -X github.com/giterlizzi/secdb-cli/internal/meta.Branch={{.Branch}}
+      - -X github.com/giterlizzi/secdb-cli/internal/meta.BuildDate={{.Date}}
+
+archives:
+  - name_template: "secdb-{{ .Os }}-{{ .Arch }}"
+
+checksum:
+  name_template: "checksums.txt"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"

@@ -1,0 +1,10 @@
+version: "2"
+
+linters:
+  enable:
+    - gomodguard_v2
+  default: all
+  exclusions:
+    paths:
+      - dist
+      - bin
