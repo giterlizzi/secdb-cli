@@ -2,9 +2,10 @@ module github.com/giterlizzi/secdb-cli
 
 go 1.26.0
 
-toolchain go1.26.6
+toolchain go1.26.7
 
 require (
+	github.com/CycloneDX/cyclonedx-go v0.11.0
 	github.com/MakeNowJust/heredoc/v2 v2.0.1
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/charmbracelet/glamour v1.0.0

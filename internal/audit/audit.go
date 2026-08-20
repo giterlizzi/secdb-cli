@@ -9,6 +9,8 @@ import (
 	"os"
 	"sort"
 	"strings"
+
+	cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
 type PackageResult struct {
@@ -176,6 +178,46 @@ func ReadPURLs(r io.Reader) ([]string, error) {
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("reading input: %w", err)
 	}
+
+	return purls, nil
+}
+
+func ReadPURLsFromSBOM(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open SBOM %s: %w", path, err)
+	}
+	defer f.Close()
+
+	bom := new(cdx.BOM)
+	decoder := cdx.NewBOMDecoder(f, cdx.BOMFileFormatJSON)
+
+	if err := decoder.Decode(bom); err != nil {
+		return nil, fmt.Errorf("failed to decode SBOM %s: %w", path, err)
+	}
+
+	if bom.Components == nil {
+		return nil, fmt.Errorf("no Components found in SBOM file")
+	}
+
+	purls := []string{}
+
+	var walk func(components *[]cdx.Component)
+
+	walk = func(components *[]cdx.Component) {
+		if components == nil {
+			return
+		}
+
+		for _, c := range *components {
+			if c.PackageURL != "" {
+				purls = append(purls, c.PackageURL)
+			}
+			walk(c.Components)
+		}
+	}
+
+	walk(bom.Components)
 
 	return purls, nil
 }
