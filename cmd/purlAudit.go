@@ -27,6 +27,7 @@ var purlAuditCmd = &cobra.Command{
 		secdb audit purl < purls.txt
 		command | secdb audit purl
 		secdb audit purl --file=purls.txt --fail-on=high
+		cdxgen -o bom.json . && secdb audit purl --sbom bom.json
 	`),
 	Short: "Audit PURLs against ZEN SecDB",
 	Long: heredoc.Doc(`
@@ -62,7 +63,7 @@ var purlAuditCmd = &cobra.Command{
 		}
 
 		if len(purls) == 0 {
-			return fmt.Errorf("no PURLs provided: pass them as arguments, with --file, or via stdin")
+			return fmt.Errorf("no PURLs provided: pass them as arguments, with --sbom, with --file, or via stdin")
 		}
 
 		purls = audit.DeduplicatePURLs(purls)
@@ -114,7 +115,7 @@ var purlAuditCmd = &cobra.Command{
 func init() {
 	auditCmd.AddCommand(purlAuditCmd)
 	purlAuditCmd.Flags().StringVarP(&purlFile, "file", "f", "", "Read PURL from file (one PURL per line) instead of arguments/stdin")
-	purlAuditCmd.Flags().StringVarP(&sbomFile, "sbom", "", "", "Read PURLs from CycloneDX SBOM file instead of arguments/stdin/file")
+	purlAuditCmd.Flags().StringVarP(&sbomFile, "sbom", "", "", "Read PURLs from CycloneDX SBOM file (JSON) instead of arguments/stdin/file")
 	purlAuditCmd.Flags().StringVarP(&auditView, "view", "v", "summary", "View mode for audit results (summary, details)")
 	purlAuditCmd.Flags().StringVarP(&failOnSeverity, "fail-on", "", "", "Fail the audit if any package has a vulnerability with the specified severity (critical, high, medium, low, info)")
 }
