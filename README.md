@@ -2,7 +2,6 @@
 
 [![CI](https://github.com/giterlizzi/secdb-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/giterlizzi/secdb-cli/actions/workflows/ci.yml)
 [![release](https://github.com/giterlizzi/secdb-cli/actions/workflows/release.yml/badge.svg)](https://github.com/giterlizzi/secdb-cli/actions/workflows/release.yml)
-[![Go Reference](https://pkg.go.dev/badge/github.com/giterlizzi/secdb-cli.svg)](https://pkg.go.dev/github.com/giterlizzi/secdb-cli)
 [![GitHub release](https://img.shields.io/github/v/release/giterlizzi/secdb-cli)](https://github.com/giterlizzi/secdb-cli/releases)
 [![License](https://img.shields.io/github/license/giterlizzi/secdb-cli)](LICENSE)
 
@@ -73,13 +72,15 @@ secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.17.0
 secdb audit purl --file=purls.txt
 secdb audit purl < purls.txt
 command | secdb audit purl
+cdxgen -o bom.json . && secdb audit purl --sbom bom.json
 ```
 
-Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed as arguments, read from a file with `--file`/`-f` (one PURL per line, `#` for comments), or piped via stdin.
+Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed as arguments, read from a file with `--file`/`-f` (one PURL per line, `#` for comments), from CycloneDX SBOM file, or piped via stdin.
 
 | Flag | Description |
 |---|---|
 | `-f`, `--file` | Read PURLs from a file instead of arguments/stdin |
+| | `--sbom` | Read PURLs from CycloneDX SBOM file instead of arguments/stdin/file |
 | `-v`, `--view` | `summary` *(default)* — one row per package, or `details` — one row per advisory (only applies to `--output=text`) |
 | `--fail-on` | Exit with status `2` if any package has a vulnerability at or above the given severity (`critical`, `high`, `medium`, `low`, `info`) |
 
