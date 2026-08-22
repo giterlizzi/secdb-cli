@@ -67,28 +67,53 @@ Templates have access to [Sprig](https://masterminds.github.io/sprig/) functions
 
 ### Audit PURLs against known vulnerabilities
 
+**Simple**
+
 ```bash
-secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.17.0
+secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1
+```
+
+**From file**
+
+```bash
 secdb audit purl --file=purls.txt
+```
+
+**From STDIN**
+
+```bash
 secdb audit purl < purls.txt
+```
+
+**From pipe**
+
+```bash
 command | secdb audit purl
+```
+
+**Using CycloneDX SBOM file (JSON)**
+
+```bash
+syft packages dir:. -o cyclonedx-json > bom.json && secdb audit purl --sbom bom.json
 cdxgen -o bom.json . && secdb audit purl --sbom bom.json
 ```
 
-Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed as arguments, read from a file with `--file`/`-f` (one PURL per line, `#` for comments), from CycloneDX SBOM file, or piped via stdin.
+**CI**
+
+Useful in CI pipelines to fail the build when high/critical vulnerabilities are found.
+
+```bash
+secdb audit purl --sbom bom.json --fail-on=high
+```
+
+Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed as arguments, read from a file with `--file`/`-f` (one PURL per line, `#` for comments), from CycloneDX `--sbom` file, or piped via stdin.
 
 | Flag | Description |
 |---|---|
 | `-f`, `--file` | Read PURLs from a file instead of arguments/stdin |
-| | `--sbom` | Read PURLs from CycloneDX SBOM file instead of arguments/stdin/file |
+| `--sbom` | Read PURLs from CycloneDX SBOM file instead of arguments/stdin/file |
 | `-v`, `--view` | `summary` *(default)* — one row per package, or `details` — one row per advisory (only applies to `--output=text`) |
 | `--fail-on` | Exit with status `2` if any package has a vulnerability at or above the given severity (`critical`, `high`, `medium`, `low`, `info`) |
-
-```bash
-secdb audit purl --file=purls.txt --fail-on=high
-```
-
-Useful in CI pipelines to fail the build when high/critical vulnerabilities are found.
 
 ### Check for a new version
 
