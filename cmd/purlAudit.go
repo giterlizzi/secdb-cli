@@ -14,20 +14,34 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var purlFile string
-var sbomFile string
-var auditView string
-var failOnSeverity string
+var (
+	purlFile       string
+	sbomFile       string
+	auditView      string
+	failOnSeverity string
+)
 
 var purlAuditCmd = &cobra.Command{
 	Use: "purl <purl1> <purl2> ...",
 	Example: heredoc.Doc(`
-		secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.17.0
-		secdb audit purl --file=purls.txt
-		secdb audit purl < purls.txt
-		command | secdb audit purl
-		secdb audit purl --file=purls.txt --fail-on=high
-		cdxgen -o bom.json . && secdb audit purl --sbom bom.json
+		Simple:
+		  	secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1
+
+		From file:
+		  	secdb audit purl --file=purls.txt
+
+		From STDIN:
+		  	secdb audit purl < purls.txt
+
+		From pipe:
+		  	command | secdb audit purl
+
+		Using CycloneDX SBOM file (JSON):
+		  	syft packages dir:. -o cyclonedx-json > bom.json && secdb audit purl --sbom bom.json
+		  	cdxgen -o bom.json . && secdb audit purl --sbom bom.json
+
+		CI:
+		  	secdb audit purl --sbom bom.json --fail-on=high
 	`),
 	Short: "Audit PURLs against ZEN SecDB",
 	Long: heredoc.Doc(`
