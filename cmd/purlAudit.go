@@ -62,11 +62,11 @@ var purlAuditCmd = &cobra.Command{
 			return err
 		}
 
+		purls = audit.ValidatePURLs(audit.DeduplicatePURLs(purls))
+
 		if len(purls) == 0 {
 			return fmt.Errorf("no PURLs provided: pass them as arguments, with --sbom, with --file, or via stdin")
 		}
-
-		purls = audit.DeduplicatePURLs(purls)
 
 		client := newSecDbClient()
 		data, err := client.PURLAudit(purls)

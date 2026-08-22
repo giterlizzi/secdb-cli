@@ -6,11 +6,13 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
+	packageurl "github.com/package-url/packageurl-go"
 )
 
 type PackageResult struct {
@@ -154,6 +156,22 @@ func GroupByAdvisory(rawResults []map[string]interface{}) []AdvisoryResult {
 	return out
 }
 
+func ValidatePURLs(purls []string) []string {
+	valid := []string{}
+
+	for _, p := range purls {
+		purl, err := packageurl.FromString(p)
+		if err != nil {
+			slog.Debug("skipping invalid PURL", "value", p, "error", err)
+			continue
+		}
+		slog.Debug("found PURL", "purl", purl.ToString())
+		valid = append(valid, purl.ToString())
+	}
+
+	return valid
+}
+
 func ReadPURLsFromFile(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -212,6 +230,7 @@ func ReadPURLsFromSBOM(path string) ([]string, error) {
 		for _, c := range *components {
 			if c.PackageURL != "" {
 				purls = append(purls, c.PackageURL)
+				slog.Debug("found PURL in CycloneDX SBOM component", slog.String("purl", c.PackageURL))
 			}
 			walk(c.Components)
 		}

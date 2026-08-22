@@ -9,6 +9,7 @@ require (
 	github.com/MakeNowJust/heredoc/v2 v2.0.1
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/charmbracelet/glamour v1.0.0
+	github.com/package-url/packageurl-go v0.1.7
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/mod v0.40.0
 	golang.org/x/term v0.45.0
