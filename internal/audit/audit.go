@@ -6,9 +6,13 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"sort"
 	"strings"
+
+	cdx "github.com/CycloneDX/cyclonedx-go"
+	packageurl "github.com/package-url/packageurl-go"
 )
 
 type PackageResult struct {
@@ -152,6 +156,22 @@ func GroupByAdvisory(rawResults []map[string]interface{}) []AdvisoryResult {
 	return out
 }
 
+func ValidatePURLs(purls []string) []string {
+	valid := []string{}
+
+	for _, p := range purls {
+		purl, err := packageurl.FromString(p)
+		if err != nil {
+			slog.Debug("skipping invalid PURL", "value", p, "error", err)
+			continue
+		}
+		slog.Debug("found PURL", "purl", purl.ToString())
+		valid = append(valid, purl.ToString())
+	}
+
+	return valid
+}
+
 func ReadPURLsFromFile(path string) ([]string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -176,6 +196,47 @@ func ReadPURLs(r io.Reader) ([]string, error) {
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("reading input: %w", err)
 	}
+
+	return purls, nil
+}
+
+func ReadPURLsFromSBOM(path string) ([]string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("open SBOM %s: %w", path, err)
+	}
+	defer f.Close()
+
+	bom := new(cdx.BOM)
+	decoder := cdx.NewBOMDecoder(f, cdx.BOMFileFormatJSON)
+
+	if err := decoder.Decode(bom); err != nil {
+		return nil, fmt.Errorf("failed to decode SBOM %s: %w", path, err)
+	}
+
+	if bom.Components == nil {
+		return nil, fmt.Errorf("no Components found in SBOM file")
+	}
+
+	purls := []string{}
+
+	var walk func(components *[]cdx.Component)
+
+	walk = func(components *[]cdx.Component) {
+		if components == nil {
+			return
+		}
+
+		for _, c := range *components {
+			if c.PackageURL != "" {
+				purls = append(purls, c.PackageURL)
+				slog.Debug("found PURL in CycloneDX SBOM component", slog.String("purl", c.PackageURL))
+			}
+			walk(c.Components)
+		}
+	}
+
+	walk(bom.Components)
 
 	return purls, nil
 }

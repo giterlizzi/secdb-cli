@@ -14,27 +14,47 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var purlFile string
-var auditView string
-var failOnSeverity string
+var (
+	purlFile       string
+	sbomFile       string
+	auditView      string
+	failOnSeverity string
+)
 
 var purlAuditCmd = &cobra.Command{
 	Use: "purl <purl1> <purl2> ...",
 	Example: heredoc.Doc(`
-		secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.17.0
-		secdb audit purl --file=purls.txt
-		secdb audit purl < purls.txt
-		command | secdb audit purl
-		secdb audit purl --file=purls.txt --fail-on=high
+		Simple:
+		  	secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1
+
+		From file:
+		  	secdb audit purl --file=purls.txt
+
+		From STDIN:
+		  	secdb audit purl < purls.txt
+
+		From pipe:
+		  	command | secdb audit purl
+
+		Using CycloneDX SBOM file (JSON):
+		  	syft packages dir:. -o cyclonedx-json > bom.json && secdb audit purl --sbom bom.json
+		  	cdxgen -o bom.json . && secdb audit purl --sbom bom.json
+
+		CI:
+		  	secdb audit purl --sbom bom.json --fail-on=high
 	`),
 	Short: "Audit PURLs against ZEN SecDB",
 	Long: heredoc.Doc(`
 		Package URLs (PURLs) are a standardized way to identify software packages.
-		This command allows you to audit one or more PURLs against the ZEN SecDB to 
+		This command allows you to audit one or more PURLs against the ZEN SecDB to
 		check for known vulnerabilities and security issues.
 
-		You can provide PURLs directly as command-line arguments, read them from a file 
-		using the --file flag, or pipe them in via standard input.
+		You can provide PURLs directly as command-line arguments, read them from a
+		file using the --file flag, extract them from a CycloneDX BOM (JSON) using
+		the --sbom flag, or pipe them in via standard input.
+
+		If more than one input method is provided, only one is used, in this order
+		of precedence: --sbom, arguments, --file, standard input.
 	`),
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -43,6 +63,8 @@ var purlAuditCmd = &cobra.Command{
 		var err error
 
 		switch {
+		case sbomFile != "":
+			purls, err = audit.ReadPURLsFromSBOM(sbomFile)
 		case len(args) > 0:
 			purls = args
 		case purlFile != "":
@@ -54,11 +76,11 @@ var purlAuditCmd = &cobra.Command{
 			return err
 		}
 
-		if len(purls) == 0 {
-			return fmt.Errorf("no PURLs provided: pass them as arguments, with --file, or via stdin")
-		}
+		purls = audit.ValidatePURLs(audit.DeduplicatePURLs(purls))
 
-		purls = audit.DeduplicatePURLs(purls)
+		if len(purls) == 0 {
+			return fmt.Errorf("no PURLs provided: pass them as arguments, with --sbom, with --file, or via stdin")
+		}
 
 		client := newSecDbClient()
 		data, err := client.PURLAudit(purls)
@@ -107,6 +129,7 @@ var purlAuditCmd = &cobra.Command{
 func init() {
 	auditCmd.AddCommand(purlAuditCmd)
 	purlAuditCmd.Flags().StringVarP(&purlFile, "file", "f", "", "Read PURL from file (one PURL per line) instead of arguments/stdin")
+	purlAuditCmd.Flags().StringVarP(&sbomFile, "sbom", "", "", "Read PURLs from CycloneDX SBOM file (JSON) instead of arguments/stdin/file")
 	purlAuditCmd.Flags().StringVarP(&auditView, "view", "v", "summary", "View mode for audit results (summary, details)")
 	purlAuditCmd.Flags().StringVarP(&failOnSeverity, "fail-on", "", "", "Fail the audit if any package has a vulnerability with the specified severity (critical, high, medium, low, info)")
 }
