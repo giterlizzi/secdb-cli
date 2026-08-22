@@ -4,6 +4,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/giterlizzi/secdb-cli/internal/meta"
 	"github.com/giterlizzi/secdb-cli/internal/output"
 	"github.com/giterlizzi/secdb-cli/internal/update"
+
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -18,6 +20,8 @@ import (
 var (
 	apiKey  string
 	baseURL string
+
+	debug bool
 
 	outputFormat       string
 	templateExpression string
@@ -39,6 +43,14 @@ var rootCmd = &cobra.Command{
 		}
 
 		startBackgroundUpdateCheck(cmd)
+
+		level := slog.LevelWarn
+		if debug {
+			level = slog.LevelDebug
+		}
+		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+		slog.SetDefault(logger)
+
 		return nil
 	},
 }
@@ -55,6 +67,9 @@ func init() {
 
 	rootCmd.PersistentFlags().StringVar(&templateFile, "template-file", "",
 		"External template path file, with --output=template or --output=html")
+
+	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false,
+		"Enable debug logging to stderr")
 }
 
 func startBackgroundUpdateCheck(cmd *cobra.Command) {
