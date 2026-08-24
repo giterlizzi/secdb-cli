@@ -1,0 +1,11 @@
+# SSVC Bulk Calculation
+
+| CVE | Decision | Exploitation | Automatable | Technical Impact | Mission & Well-being Impact | Vector String |
+|---|---|---|---|---|---|---|
+{{- range .}}
+{{- if eq .Status "ok"}}
+| {{.CVE.ID}} | {{.SSVC.Decision | ssvc_decision }} | {{.SSVC.Exploitation}} | {{.SSVC.Automatable}} | {{.SSVC.TechnicalImpact}} | {{.SSVC.MissionWellBeingImpact}} | {{.VectorString}} |
+{{- else}}
+| {{.CVE.ID}} | _{{.Status | upper}}_ | - | - | - | - | - |
+{{- end}}
+{{- end}}

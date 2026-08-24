@@ -37,6 +37,7 @@ func funcMap() template.FuncMap {
 		delete(fm, name)
 	}
 	fm["severity"] = SeverityMarkdown
+	fm["ssvc_decision"] = SSVCDecisionMarkdown
 	return fm
 }
 
@@ -74,4 +75,21 @@ func SeverityMarkdown(severity string) string {
 	}
 
 	return fmt.Sprintf("%s **%s**", emoji, strings.ToUpper(severity))
+}
+
+func SSVCDecisionMarkdown(decision string) string {
+	var emoji string
+	switch decision {
+	case "act":
+		emoji = "🔴"
+	case "attend":
+		emoji = "🟠"
+	case "track*":
+		emoji = "🟡"
+	case "track":
+		emoji = "⚪"
+	default:
+		return decision
+	}
+	return fmt.Sprintf("%s **%s**", emoji, strings.ToUpper(decision))
 }
