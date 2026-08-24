@@ -8,7 +8,7 @@ COMMIT_HASH := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
 BRANCH      := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)
 BUILD_DATE  := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 
-ALLOWED_LICENSES := MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC
+ALLOWED_LICENSES := MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,Unlicense
  
 LDFLAGS := -X '$(MODULE)/internal/meta.Version=$(VERSION)' \
            -X '$(MODULE)/internal/meta.CommitHash=$(COMMIT_HASH)' \
