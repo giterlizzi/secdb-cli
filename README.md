@@ -57,6 +57,7 @@ Supports `-o` / `--output`:
 | `json` | Raw API response as JSON |
 | `template` | Custom [Go template](https://pkg.go.dev/text/template) via `--template` (inline) or `--template-file` |
 | `html` | Custom HTML via `--template`/`--template-file`, rendered with `html/template` (safe escaping) |
+| `sarif` | SARIF 2.1.0 report (`audit purl` only, see below) |
 
 ```bash
 secdb cve CVE-2021-44228 -o json
@@ -106,14 +107,82 @@ Useful in CI pipelines to fail the build when high/critical vulnerabilities are 
 secdb audit purl --sbom bom.json --fail-on=high
 ```
 
+**SARIF report (e.g. for GitHub Code Scanning)**
+
+```bash
+secdb audit purl --sbom bom.json --output=sarif > results.sarif
+```
+
+Produces a [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) report — one rule/result per (advisory, affected package) pair, with severity, CVEs, CWEs and a CVSS-derived `security-severity` score. The artifact location in the report comes from `--sbom`, so pair `--output=sarif` with `--sbom` for a meaningful report; without `--sbom` the artifact location is left empty. `--output=sarif` is only supported by `audit purl`. A finding matched by `--ignore-file` is still included in the report, but carries a SARIF `suppressions` entry (`kind: external`, `status: accepted`, with the rule's `reason` as justification), so consumers like GitHub Code Scanning don't open a new alert for it.
+
+**Ignoring accepted-risk findings**
+
+```bash
+secdb audit purl --sbom bom.json --fail-on=high --ignore-file=.secdbignore
+```
+
+`--ignore-file` (default: `.secdbignore`) points to a YAML file of accepted-risk rules. A matching rule never hides a finding from the report — it only excludes it from the `--fail-on` exit-code check (and, for `--output=sarif`, marks the result as suppressed instead of removing it):
+
+```yaml
+ignore:
+  - vulnerability: CVE-2021-44228
+    reason: "Not reachable in our usage of this library"
+
+  - vulnerability: CVE-2024-33333
+    reason: "Fixed upstream, upgrade planned"
+    package:
+      name: some-package
+      version: 1.0.0   # optional: without it, the rule matches every version of the package
+    expires: 2026-12-31 # optional: rule stops applying after this date (inclusive)
+```
+
+A rule matches on `vulnerability` (advisory ID or CVE) and, optionally, narrows to a specific `package.name`/`package.version`. It's a no-op if the audit result doesn't already have a matching, non-expired rule.
+
 Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed as arguments, read from a file with `--file`/`-f` (one PURL per line, `#` for comments), from CycloneDX `--sbom` file, or piped via stdin.
 
 | Flag | Description |
 |---|---|
 | `-f`, `--file` | Read PURLs from a file instead of arguments/stdin |
-| `--sbom` | Read PURLs from CycloneDX SBOM file instead of arguments/stdin/file |
+| `--sbom` | Read PURLs from CycloneDX SBOM file (JSON) instead of arguments/stdin/file |
 | `-v`, `--view` | `summary` *(default)* — one row per package, or `details` — one row per advisory (only applies to `--output=text`) |
 | `--fail-on` | Exit with status `2` if any package has a vulnerability at or above the given severity (`critical`, `high`, `medium`, `low`, `info`) |
+| `--ignore-file` | YAML file of accepted-risk rules that exclude matching findings from `--fail-on` (default `.secdbignore`) |
+
+### Calculate SSVC (bulk)
+
+[Stakeholder-Specific Vulnerability Categorization (SSVC)](https://www.cisa.gov/ssvc-calculator), per the CISA methodology, combines a CVE's exploitation status and technical impact (from ZEN SecDB) with stakeholder-supplied context to produce an actionable decision: `track`, `track*`, `attend`, or `act`.
+
+**Simple**
+
+```bash
+secdb ssvc calculate CVE-2021-44228 --mission-prevalence essential --public-well-being-impact material
+```
+
+**Bulk, multiple CVEs**
+
+```bash
+secdb ssvc calculate CVE-2021-44228 CVE-2023-4863 --mission-prevalence support --public-well-being-impact minimal
+```
+
+**From file**
+
+```bash
+secdb ssvc calculate --file cves.txt --mission-prevalence support --public-well-being-impact minimal
+```
+
+**From STDIN**
+
+```bash
+secdb ssvc calculate --mission-prevalence support --public-well-being-impact minimal < cves.txt
+```
+
+CVE identifiers can be passed as arguments, read from a file with `--file`/`-f` (one CVE per line, `#` for comments), or piped via stdin — same precedence as `audit purl`: arguments, then `--file`, then stdin. Duplicate CVEs are deduplicated; a CVE that can't be found still appears in the report with its status instead of failing the whole batch.
+
+| Flag | Description |
+|---|---|
+| `-f`, `--file` | Read CVEs from a file instead of arguments/stdin |
+| `--mission-prevalence` | *(required)* `minimal`, `support`, or `essential` |
+| `--public-well-being-impact` | *(required)* `minimal`, `material`, or `irreversible` |
 
 ### Check for a new version
 
