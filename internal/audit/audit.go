@@ -3,11 +3,11 @@
 package audit
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"log/slog"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 
@@ -18,36 +18,61 @@ import (
 type PackageResult struct {
 	Package       string   `json:"package"`
 	CVEs          []string `json:"cves"`
+	CWEs          []string `json:"cwes"`
 	AdvisoryCount int      `json:"advisory_count"`
 	MaxSeverity   string   `json:"max_severity"`
 }
 
 type AdvisoryResult struct {
-	ID       string
-	Title    string
-	Severity string
-	Packages []string
-	CVEs     []string
+	ID           string
+	Title        string
+	Summary      string
+	Description  string
+	Severity     string
+	Packages     []string
+	CVEs         []string
+	CWEs         []string
+	CVSSScore    float64
+	URL          string
+	Ignored      bool
+	IgnoreReason string
 }
 
 var SeverityLevels = map[string]int{
 	"critical": 5, "high": 4, "medium": 3, "moderate": 3, "low": 2, "info": 1, "unknown": 1, "": 0,
 }
 
-func OverallSeverity(rawResults []map[string]interface{}) string {
+func OverallSeverity(rawResults []map[string]interface{}, ignoreFile *IgnoreFile) string {
 	maxSeverity := ""
 
 	for _, r := range rawResults {
+		pkg, _ := r["package"].(string)
 		advisories, _ := r["advisories"].([]interface{})
 
 		for _, a := range advisories {
-			advisory, ok := a.(map[string]interface{})
+			adv, ok := a.(map[string]interface{})
 
 			if !ok {
 				continue
 			}
 
-			severity := strings.ToLower(fmt.Sprint(advisory["severity"]))
+			severity := strings.ToLower(fmt.Sprint(adv["severity"]))
+
+			if ignoreFile != nil {
+				id := adv["id"].(string)
+
+				cvesRaw, _ := adv["cves"].([]interface{})
+				cves := make([]string, 0, len(cvesRaw))
+				for _, c := range cvesRaw {
+					cves = append(cves, c.(string))
+				}
+
+				if ignored, _ := ignoreFile.IsIgnored(id, cves, pkg); ignored {
+					continue
+				}
+
+			}
+
 			if SeverityLevels[severity] > SeverityLevels[maxSeverity] {
 				maxSeverity = severity
 			}
@@ -63,41 +88,44 @@ func SummarizePURLAudit(rawResults []map[string]interface{}) []PackageResult {
 		pkg, _ := r["package"].(string)
 		advisories, _ := r["advisories"].([]interface{})
 
-		cveSet := make(map[string]bool)
+		cveSeen := make(map[string]bool)
+		cweSeen := make(map[string]bool)
 		maxSeverity := ""
 
 		for _, a := range advisories {
-			advisory, ok := a.(map[string]interface{})
+			adv, ok := a.(map[string]interface{})
 
 			if !ok {
 				continue
 			}
 
-			severity := strings.ToLower(fmt.Sprint(advisory["severity"]))
+			severity := strings.ToLower(fmt.Sprint(adv["severity"]))
 			if SeverityLevels[severity] > SeverityLevels[maxSeverity] {
 				maxSeverity = severity
 			}
 
-			cvesRaw, _ := advisory["cves"].([]interface{})
+			cvesRaw, _ := adv["cves"].([]interface{})
+			cwesRaw, _ := adv["weaknesses"].([]map[string]interface{})
 
-			for _, c := range cvesRaw {
-				if s, ok := c.(string); ok {
-					cveSet[s] = true
-				}
+			for _, cve := range cvesRaw {
+				cveSeen[cve.(string)] = true
+			}
+
+			for _, cwe := range cwesRaw {
+				cweSeen[cwe["id"].(string)] = true
 			}
 		}
 
-		cves := make([]string, 0, len(cveSet))
-
-		for cve := range cveSet {
-			cves = append(cves, cve)
-		}
+		cves := slices.Collect(maps.Keys(cveSeen))
+		cwes := slices.Collect(maps.Keys(cweSeen))
 
 		sort.Slice(cves, func(i, j int) bool { return cves[i] > cves[j] })
+		sort.Slice(cwes, func(i, j int) bool { return cwes[i] > cwes[j] })
 
 		out = append(out, PackageResult{
 			Package:       pkg,
 			CVEs:          cves,
+			CWEs:          cwes,
 			AdvisoryCount: len(advisories),
 			MaxSeverity:   maxSeverity,
 		})
@@ -105,7 +133,7 @@ func SummarizePURLAudit(rawResults []map[string]interface{}) []PackageResult {
 	return out
 }
 
-func GroupByAdvisory(rawResults []map[string]interface{}) []AdvisoryResult {
+func GroupByAdvisory(rawResults []map[string]interface{}, ignoreFile *IgnoreFile) []AdvisoryResult {
 	byID := make(map[string]*AdvisoryResult)
 	var order []string
 
@@ -126,23 +154,56 @@ func GroupByAdvisory(rawResults []map[string]interface{}) []AdvisoryResult {
 
 			if _, exists := byID[id]; !exists {
 				title, _ := adv["title"].(string)
+				summary, _ := adv["summary"].(string)
+				description, _ := adv["description"].(string)
+				url, _ := adv["url"].(string)
 				severity, _ := adv["severity"].(string)
 
 				cvesRaw, _ := adv["cves"].([]interface{})
 				cves := make([]string, 0, len(cvesRaw))
 
+				cwesRaw, _ := adv["weaknesses"].([]map[string]interface{})
+				cwes := make([]string, 0, len(cwesRaw))
+
+				cvssArray, _ := adv["cvss"].([]map[string]interface{})
+				cvssScore := 0.0
+				cvssVersion := 0.0
+
 				for _, c := range cvesRaw {
-					if s, ok := c.(string); ok {
-						cves = append(cves, s)
+					cves = append(cves, c.(string))
+				}
+
+				for _, w := range cwesRaw {
+					cwes = append(cwes, w["id"].(string))
+				}
+
+				for _, cvss := range cvssArray {
+					score := cvss["base_score"].(float64)
+					version := cvss["version"].(float64)
+					if cvssVersion < version {
+						cvssScore = score
 					}
 				}
 
+				sort.Slice(cves, func(i, j int) bool { return cves[i] > cves[j] })
+				sort.Slice(cwes, func(i, j int) bool { return cwes[i] > cwes[j] })
+
+				ignored, reason := ignoreFile.IsIgnored(id, cves, pkg)
+
 				byID[id] = &AdvisoryResult{
-					ID:       id,
-					Title:    title,
-					Severity: strings.ToLower(severity),
-					CVEs:     cves,
+					ID:           id,
+					Title:        title,
+					Summary:      summary,
+					Description:  description,
+					URL:          url,
+					Severity:     strings.ToLower(severity),
+					CVEs:         cves,
+					CWEs:         cwes,
+					CVSSScore:    cvssScore,
+					Ignored:      ignored,
+					IgnoreReason: reason,
 				}
+
 				order = append(order, id)
 			}
 			byID[id].Packages = append(byID[id].Packages, pkg)
@@ -170,34 +231,6 @@ func ValidatePURLs(purls []string) []string {
 	}
 
 	return valid
-}
-
-func ReadPURLsFromFile(path string) ([]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("open %s: %w", path, err)
-	}
-	defer f.Close()
-	return ReadPURLs(f)
-}
-
-func ReadPURLs(r io.Reader) ([]string, error) {
-	purls := []string{}
-	scanner := bufio.NewScanner(r)
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		purls = append(purls, line)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("reading input: %w", err)
-	}
-
-	return purls, nil
 }
 
 func ReadPURLsFromSBOM(path string) ([]string, error) {
@@ -239,18 +272,4 @@ func ReadPURLsFromSBOM(path string) ([]string, error) {
 	walk(bom.Components)
 
 	return purls, nil
-}
-
-func DeduplicatePURLs(purls []string) []string {
-	seen := make(map[string]bool, len(purls))
-	unique := []string{}
-
-	for _, p := range purls {
-		if !seen[p] {
-			seen[p] = true
-			unique = append(unique, p)
-		}
-	}
-
-	return unique
 }

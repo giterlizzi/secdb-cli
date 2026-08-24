@@ -9,6 +9,7 @@ import (
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
 	"github.com/giterlizzi/secdb-cli/internal/output"
+	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
@@ -19,6 +20,7 @@ var (
 	sbomFile       string
 	auditView      string
 	failOnSeverity string
+	ignoreFilePath string
 )
 
 var purlAuditCmd = &cobra.Command{
@@ -42,6 +44,9 @@ var purlAuditCmd = &cobra.Command{
 
 		CI:
 		  	secdb audit purl --sbom bom.json --fail-on=high
+
+		SARIF (e.g. for GitHub Code Scanning):
+		  	secdb audit purl --sbom bom.json --output=sarif > results.sarif
 	`),
 	Short: "Audit PURLs against ZEN SecDB",
 	Long: heredoc.Doc(`
@@ -55,6 +60,14 @@ var purlAuditCmd = &cobra.Command{
 
 		If more than one input method is provided, only one is used, in this order
 		of precedence: --sbom, arguments, --file, standard input.
+
+		Use --output=sarif to produce a SARIF 2.1.0 report suitable for GitHub Code
+		Scanning or other SARIF consumers. The artifact location in the report is
+		taken from --sbom, so pair --output=sarif with --sbom for a meaningful
+		report; without --sbom the artifact location is left empty. Findings matched
+		by --ignore-file are still included in the report, but as a suppressed
+		result (kind: external, status: accepted) so SARIF consumers like GitHub
+		Code Scanning don't open a new alert for them.
 	`),
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -65,21 +78,22 @@ var purlAuditCmd = &cobra.Command{
 		switch {
 		case sbomFile != "":
 			purls, err = audit.ReadPURLsFromSBOM(sbomFile)
-		case len(args) > 0:
-			purls = args
-		case purlFile != "":
-			purls, err = audit.ReadPURLsFromFile(purlFile)
 		default:
-			purls, err = audit.ReadPURLs(os.Stdin)
+			purls, err = util.ReadIdentifiers(args, purlFile)
 		}
 		if err != nil {
 			return err
 		}
 
-		purls = audit.ValidatePURLs(audit.DeduplicatePURLs(purls))
+		purls = audit.ValidatePURLs(util.Deduplicate(purls))
 
 		if len(purls) == 0 {
 			return fmt.Errorf("no PURLs provided: pass them as arguments, with --sbom, with --file, or via stdin")
+		}
+
+		ignoreFile, err := audit.LoadIgnoreFile(ignoreFilePath)
+		if err != nil {
+			return err
 		}
 
 		client := newSecDbClient()
@@ -88,20 +102,23 @@ var purlAuditCmd = &cobra.Command{
 			return err
 		}
 
-		if outputFormat == "text" {
+		switch outputFormat {
+		case "text":
 			switch auditView {
 			case "summary":
 				if err := output.RenderText(os.Stdout, audit.SummarizePURLAudit(data), "audit-purl-summary"); err != nil {
 					return fmt.Errorf("failed to render summary: %w", err)
 				}
 			case "details":
-				if err := output.RenderText(os.Stdout, audit.GroupByAdvisory(data), "audit-purl-details"); err != nil {
+				if err := output.RenderText(os.Stdout, audit.GroupByAdvisory(data, ignoreFile), "audit-purl-details"); err != nil {
 					return fmt.Errorf("failed to render details: %w", err)
 				}
 			default:
 				return fmt.Errorf("invalid --view option: %q (valid options: summary, details)", auditView)
 			}
-		} else {
+		case "sarif":
+			return output.WriteSARIF(os.Stdout, audit.GroupByAdvisory(data, ignoreFile), sbomFile)
+		default:
 			if err := output.Render(os.Stdout, data, output.Format(outputFormat), newOutputOptions()); err != nil {
 				return fmt.Errorf("failed to render output: %w", err)
 			}
@@ -113,7 +130,7 @@ var purlAuditCmd = &cobra.Command{
 				return fmt.Errorf("invalid --fail-on severity: %q (valid options: critical, high, medium, low, info)", failOnSeverity)
 			}
 
-			if maxSeverity := audit.OverallSeverity(data); maxSeverity != "" {
+			if maxSeverity := audit.OverallSeverity(data, ignoreFile); maxSeverity != "" {
 				if audit.SeverityLevels[maxSeverity] >= audit.SeverityLevels[threshold] {
 					fmt.Fprintf(os.Stderr, "audit failed: package has a vulnerability with severity %q (fail-on=%q)\n", maxSeverity, failOnSeverity)
 					os.Exit(2)
@@ -128,8 +145,15 @@ var purlAuditCmd = &cobra.Command{
 
 func init() {
 	auditCmd.AddCommand(purlAuditCmd)
-	purlAuditCmd.Flags().StringVarP(&purlFile, "file", "f", "", "Read PURL from file (one PURL per line) instead of arguments/stdin")
-	purlAuditCmd.Flags().StringVarP(&sbomFile, "sbom", "", "", "Read PURLs from CycloneDX SBOM file (JSON) instead of arguments/stdin/file")
-	purlAuditCmd.Flags().StringVarP(&auditView, "view", "v", "summary", "View mode for audit results (summary, details)")
-	purlAuditCmd.Flags().StringVarP(&failOnSeverity, "fail-on", "", "", "Fail the audit if any package has a vulnerability with the specified severity (critical, high, medium, low, info)")
+
+	purlAuditCmd.Flags().StringVarP(&purlFile, "file", "f", "",
+		"Read PURL from file (one PURL per line) instead of arguments/stdin")
+	purlAuditCmd.Flags().StringVarP(&sbomFile, "sbom", "", "",
+		"Read PURLs from CycloneDX SBOM file (JSON) instead of arguments/stdin/file")
+	purlAuditCmd.Flags().StringVarP(&auditView, "view", "v", "summary",
+		"View mode for audit results (summary, details)")
+	purlAuditCmd.Flags().StringVarP(&failOnSeverity, "fail-on", "", "",
+		"Fail the audit if any package has a vulnerability with the specified severity (critical, high, medium, low, info)")
+	purlAuditCmd.Flags().StringVar(&ignoreFilePath, "ignore-file", ".secdbignore",
+		"YAML file of ignore rules for --fail-on (doesn't hide findings from the report, only from the exit code)")
 }

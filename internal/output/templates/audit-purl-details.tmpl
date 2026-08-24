@@ -1,8 +1,8 @@
 
 # PURL Audit - Details
  
-| ID | Title | Severity | Packages | CVEs |
-|---|---|---|---|---|
+| ID | Title | Severity | Packages | CVEs | Ignored ? |
+|---|---|---|---|---|---|
 {{- range .}}
-| {{.ID}} | {{.Title | replace "|" "\\|"}} | {{.Severity | severity}} | {{join ", " .Packages}} | {{join ", " .CVEs}} |
+| {{.ID}} | {{.Title | replace "|" "\\|"}} | {{.Severity | severity}} | {{join ", " .Packages}} | {{join ", " .CVEs}} | {{if .Ignored}}{{.IgnoreReason | replace "|" "\\|"}}{{else}}-{{end}} |
 {{- end}}

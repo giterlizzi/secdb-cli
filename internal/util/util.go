@@ -3,7 +3,12 @@
 package util
 
 import (
+	"bufio"
 	"fmt"
+	"golang.org/x/term"
+	"io"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -32,4 +37,56 @@ func TimeAgo(t time.Time) string {
 	default:
 		return fmt.Sprintf("%d days ago", int(d.Hours()/24))
 	}
+}
+
+func Deduplicate(items []string) []string {
+	seen := make(map[string]bool, len(items))
+	unique := []string{}
+
+	for _, s := range items {
+		if !seen[s] {
+			seen[s] = true
+			unique = append(unique, s)
+		}
+	}
+
+	return unique
+}
+
+func ReadIdentifiers(args []string, filePath string) ([]string, error) {
+	switch {
+	case len(args) > 0:
+		return args, nil
+	case filePath != "":
+		f, err := os.Open(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("open %s: %w", filePath, err)
+		}
+		defer f.Close()
+		return readLines(f)
+	default:
+		if term.IsTerminal(int(os.Stdin.Fd())) {
+			return nil, fmt.Errorf("no input provided")
+		}
+		return readLines(os.Stdin)
+	}
+}
+
+func readLines(r io.Reader) ([]string, error) {
+	items := []string{}
+	scanner := bufio.NewScanner(r)
+
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		items = append(items, line)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("reading input: %w", err)
+	}
+
+	return items, nil
 }
