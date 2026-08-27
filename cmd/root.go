@@ -37,9 +37,9 @@ var rootCmd = &cobra.Command{
 		apiKey = os.Getenv("SECDB_API_KEY")
 
 		switch outputFormat {
-		case "json", "yaml", "text", "template", "html", "sarif":
+		case "json", "yaml", "text", "template", "html", "sarif", "csv":
 		default:
-			return fmt.Errorf("invalid --output: %s (want json|yaml|text|html|template|sarif)", outputFormat)
+			return fmt.Errorf("invalid --output: %s (want json|yaml|text|html|template|sarif|csv)", outputFormat)
 		}
 
 		startBackgroundUpdateCheck(cmd)
@@ -60,7 +60,7 @@ func init() {
 		"ZEN SecDB API base URL (default: https://secdb.nttzen.cloud/)")
 
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "text",
-		"Output format: text, json, yaml, template, html, sarif (sarif: audit purl only)")
+		"Output format: text, json, yaml, template, html, sarif, csv (sarif/csv: audit only)")
 
 	rootCmd.PersistentFlags().StringVar(&templateExpression, "template", "",
 		"Inline Go Template, with --output=template or --output=html")
