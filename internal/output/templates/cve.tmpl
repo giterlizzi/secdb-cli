@@ -4,24 +4,22 @@
 {{- if .severity }}
 - Severity:  {{.severity | severity}} ({{printf "%.1f" .score}}){{if .cisa_kev}}  🔥 **KNOWN EXPLOITED**{{end}}
 {{- end}}
-- Status:    {{.status}}{{if .nvd_status}} (NVD: {{.nvd_status}}){{end}}
+- Status:    {{.status}}{{if .nvd_status}} / {{.nvd_status}} _(NVD)_{{end}}
 - Published: {{.published}}
 - Modified:  {{.modified}}
+{{- if .source}}
+- Source:    {{.source}}
+{{- end}}
 {{- with .epss}}
-- EPSS:      {{printf "%.2f" (mulf 100 .score)}}% (percentile {{printf "%.0f" (mulf 100 .percentile)}})
+- EPSS:      {{printf "%.2f" (mulf 100 .score)}}% ({{printf "%.0f" (mulf 100 .percentile)}}° pct)
+{{- end}}
+{{- if .secdb_url}}
+- Link:      {{.secdb_url}}/cve/detail/{{.id}}
 {{- end}}
 
 ## Description
 
-{{- $lines := list -}}
-{{- range splitList "\n" .description -}}
-  {{- if gt (len .) 80 -}}
-    {{- $lines = append $lines (wrap 80 .) -}}
-  {{- else -}}
-    {{- $lines = append $lines . -}}
-  {{- end -}}
-{{- end }}
-{{ join "\n" $lines }}
+{{.description}}
 
 {{- if or .metrics.cvss4 .metrics.cvss3 .metrics.cvss2}}
 
@@ -30,11 +28,11 @@
 | Version | Score | Severity | Vector String |
 |---------|-------|----------|---------------|
 {{- with .metrics.cvss4}}
-| CVSS v{{.version}} | {{printf "%.1f" .base_score}} | {{.base_severity}} | {{.vector_string}} |{{end}}
+| CVSS v{{.version}} | {{printf "%.1f" .base_score}} | {{.base_severity | severity}} | {{.vector_string}} |{{end}}
 {{- with .metrics.cvss3}}
-| CVSS v{{.version}} | {{printf "%.1f" .base_score}} | {{.base_severity}} | {{.vector_string}} |{{end}}
+| CVSS v{{.version}} | {{printf "%.1f" .base_score}} | {{.base_severity | severity}} | {{.vector_string}} |{{end}}
 {{- with .metrics.cvss2}}
-| CVSS v{{.version}} | {{printf "%.1f" .base_score}} | {{.base_severity}} | {{.vector_string}} |{{end}}
+| CVSS v{{.version}} | {{printf "%.1f" .base_score}} | {{.base_severity | severity}} | {{.vector_string}} |{{end}}
 {{- end}}
 
 {{- if .metrics.ssvc }}
@@ -51,7 +49,7 @@
 
 ## Weaknesses
 {{- range .weaknesses}}
-  - {{.id}}: {{wrap 76 .name | indent 2 | trimPrefix "  "}}
+- **{{.id}}**: {{.name}}
 {{- end}}
 {{- end}}
 {{- with .cisa_kev}}
@@ -59,9 +57,9 @@
 ## 🔥 CISA KEV
 - Added {{.added_date}}, due {{.due_date}}
 - Ransomware use: {{if eq .known_ransomware_campaign_use "Known"}}☠️ {{end}}{{.known_ransomware_campaign_use}}
-- Action: {{wrap 76 .required_action | indent 2 | trimPrefix "  "}}
+- Action: {{.required_action}}
 {{- end}}
-{{- if .advisories}}
+{{- if .affected_total}}
 
 ## Affected Products
 {{.affected_total}} product(s) across {{len .affected_vendors_summary}} vendor(s) affected{{if .not_affected_total}} ({{.not_affected_total}} explicitly confirmed NOT affected){{end}}:
@@ -78,7 +76,7 @@
 
 ## Advisories
 {{- range .advisories}}
-- **{{.id}}**: {{wrap 76 .title | indent 4 | trimPrefix "    "}} {{if .severity}}- {{.severity | upper}}{{end}}
+- **{{.id}}**: {{.title}}{{if .severity}} - {{.severity | severity}}{{end}}
 {{- end}}
 {{- end}}
 {{- if .sightings}}
@@ -86,5 +84,12 @@
 ## Sightings
 {{- range .sightings}}
   - {{.source}}: {{.title}} ({{.date}})
+{{- end}}
+{{- end}}
+{{- if .references}}
+
+## References
+{{- range .references}}
+- {{if .name}}[{{.name}}]({{.url}}){{else}}<{{.url}}>{{end}}{{with .source}}{{if .name}} - {{.name}}{{end}}{{end}}{{if .tags}} _({{join ", " .tags}})_{{end}}
 {{- end}}
 {{- end}}

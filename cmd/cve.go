@@ -19,11 +19,11 @@ var cveCmd = &cobra.Command{
 	Use:   "cve <id>",
 	Short: "Fetch CVE info from ZEN SecDB",
 	Long: heredoc.Doc(`
-		This command allows you to fetch information about a specific CVE (Common 
+		This command allows you to fetch information about a specific CVE (Common
 		Vulnerabilities and Exposures) identifier from the ZEN SecDB.
 
-		You can provide a CVE identifier as a command-line argument, and the command 
-		will retrieve relevant information about that CVE, including affected products 
+		You can provide a CVE identifier as a command-line argument, and the command
+		will retrieve relevant information about that CVE, including affected products
 		and advisories.
 	`),
 	Example: heredoc.Doc(`
@@ -39,15 +39,16 @@ var cveCmd = &cobra.Command{
 		}
 
 		client := newSecDbClient()
-		data, err := client.GetCVE(cveID, "affected_products", "advisories")
+		data, err := client.GetCVE(cveID, "affected_products", "advisories", "references")
 		if err != nil {
 			return err
 		}
 
-		cve.SummarizeAffectedProducts(data)
-
 		if outputFormat == "text" {
-			return output.RenderText(os.Stdout, data, "cve")
+			data["secdb_url"] = client.BaseURL()
+			cve.SummarizeAffectedProducts(data)
+
+			return output.RenderText(os.Stdout, data, "cve", output.TerminalWrap(100))
 		}
 
 		return output.Render(os.Stdout, data, output.Format(outputFormat), newOutputOptions())
