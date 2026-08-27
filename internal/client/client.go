@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -14,7 +15,7 @@ import (
 	"github.com/giterlizzi/secdb-cli/internal/meta"
 )
 
-const defaultBaseURL = "https://secdb.nttzen.cloud/"
+const defaultBaseURL = "https://secdb.nttzen.cloud"
 
 var userAgent = fmt.Sprintf("secdb-cli/%s (+https://github.com/giterlizzi/secdb-cli)", meta.Version)
 
@@ -26,6 +27,71 @@ type Client struct {
 
 type PURLAuditRequest struct {
 	Purls []string `json:"purls"`
+}
+
+type LinuxAuditRequest struct {
+	OS       string   `json:"os"`
+	Version  string   `json:"version"`
+	Arch     string   `json:"arch,omitempty"`
+	Packages []string `json:"packages"`
+}
+
+type AuditItem struct {
+	Package    string     `json:"package"`
+	CVEs       []string   `json:"cves"`
+	Advisories []Advisory `json:"advisories"`
+}
+
+type Timestamp struct {
+	time.Time
+}
+
+func (t *Timestamp) UnmarshalJSON(b []byte) (err error) {
+	date, err := time.Parse(`"2006-01-02T15:04:05"`, string(b))
+	if err != nil {
+		return err
+	}
+	t.Time = date
+	return
+}
+
+type Advisory struct {
+	ID             string    `json:"id"`
+	Type           string    `json:"type"`
+	Published      Timestamp `json:"published"`
+	Modified       Timestamp `json:"modified"`
+	Title          string    `json:"title"`
+	Summary        string    `json:"summary,omitempty"`
+	Description    string    `json:"description,omitempty"`
+	Solution       string    `json:"solution,omitempty"`
+	Rights         string    `json:"rights"`
+	URL            string    `json:"url"`
+	Severity       string    `json:"severity,omitempty"`
+	SeveritySource string    `json:"severity_source,omitempty"`
+	Tags           []string  `json:"tags"`
+	Impacts        []string  `json:"impacts"`
+	CVEs           []string  `json:"cves"`
+	Weaknesses     []struct {
+		ID   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"weaknesses"`
+	CVSS []struct {
+		Version      float64 `json:"version"`
+		BaseScore    float64 `json:"base_score"`
+		BaseSeverity string  `json:"base_severity"`
+		VectorString string  `json:"vector_string"`
+	} `json:"cvss"`
+	References []struct {
+		Name   string `json:"name,omitempty"`
+		RefID  string `json:"ref_id,omitempty"`
+		Source string `json:"source,omitempty"`
+		URL    string `json:"url"`
+	} `json:"references"`
+	Packages []struct {
+		Status string `json:"status"`
+		PURL   string `json:"purl"`
+		VERS   string `json:"vers"`
+	} `json:"packages"`
 }
 
 type SSVCBulkRequest struct {
@@ -59,13 +125,20 @@ func NewClient(apiKey string) *Client {
 	return &Client{
 		baseURL:    defaultBaseURL,
 		apiKey:     apiKey,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient: &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
 func (c *Client) WithBaseURL(url string) *Client {
-	c.baseURL = url
+	c.baseURL = strings.TrimRight(url, "/")
 	return c
+}
+
+// BaseURL returns the configured base URL (no trailing slash). The ZEN SecDB
+// web GUI shares this host, so callers build permalinks like
+// BaseURL()+"/cve/detail/CVE-..." that follow a custom --base-url.
+func (c *Client) BaseURL() string {
+	return c.baseURL
 }
 
 func (c *Client) request(req *http.Request) ([]byte, error) {
@@ -79,11 +152,16 @@ func (c *Client) request(req *http.Request) ([]byte, error) {
 		req.Header.Set("X-API-KEY", c.apiKey)
 	}
 
+	slog.Debug("request", "method", req.Method, "url", req.URL)
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+
+	slog.Debug("response", "status", resp.Status)
+	logRateLimit(resp)
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -142,7 +220,7 @@ func (c *Client) GetCVE(id string, expand ...string) (map[string]interface{}, er
 	return data, nil
 }
 
-func (c *Client) PURLAudit(purls []string) ([]map[string]interface{}, error) {
+func (c *Client) PURLAudit(purls []string) ([]AuditItem, error) {
 	payload, err := json.Marshal(PURLAuditRequest{Purls: purls})
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal JSON: %w", err)
@@ -153,7 +231,31 @@ func (c *Client) PURLAudit(purls []string) ([]map[string]interface{}, error) {
 		return nil, fmt.Errorf("failed to audit PURLs: %w", err)
 	}
 
-	var data []map[string]interface{}
+	var data []AuditItem
+	if err := json.Unmarshal(body, &data); err != nil {
+		return nil, fmt.Errorf("parse JSON: %w", err)
+	}
+
+	return data, nil
+}
+
+func (c *Client) LinuxAudit(osName, version, arch string, packages []string) ([]AuditItem, error) {
+	payload, err := json.Marshal(LinuxAuditRequest{
+		OS:       osName,
+		Version:  version,
+		Arch:     arch,
+		Packages: packages,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal JSON: %w", err)
+	}
+
+	body, err := c.post("/api/v1/audit/linux", bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, fmt.Errorf("failed to audit Linux packages: %w", err)
+	}
+
+	var data []AuditItem
 	if err := json.Unmarshal(body, &data); err != nil {
 		return nil, fmt.Errorf("parse JSON: %w", err)
 	}
@@ -182,4 +284,24 @@ func (c *Client) SSVCBulk(cveIDs []string, missionPrevalence string, publicWellB
 	}
 
 	return data, nil
+}
+
+// logRateLimit, log the total remaining and used requests from RateLimit-* headers
+func logRateLimit(resp *http.Response) {
+
+	remaining := resp.Header.Get("RateLimit-Remaining")
+	limit := resp.Header.Get("RateLimit-Limit")
+	used := resp.Header.Get("RateLimit-Used")
+	reset := resp.Header.Get("RateLimit-Reset")
+
+	if limit == "" && remaining == "" {
+		return
+	}
+
+	slog.Debug("rate limit",
+		"used", used,
+		"remaining", remaining,
+		"limit", limit,
+		"reset_seconds", reset,
+	)
 }
