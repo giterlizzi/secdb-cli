@@ -1,0 +1,9 @@
+{{- define "audit-summary" -}}
+{{- $label := .Label -}}
+
+| {{$label}} | CVEs | Advisories | Max Severity |
+|---|---|---|---|
+{{- range .Results}}
+| {{.Package}} | {{len .CVEs}} | {{.AdvisoryCount}} | {{.MaxSeverity | severity}} |
+{{- end}}
+{{- end}}

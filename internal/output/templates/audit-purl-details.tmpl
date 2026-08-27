@@ -1,8 +1,9 @@
-
 # PURL Audit - Details
- 
-| ID | Title | Severity | Packages | CVEs | Ignored ? |
-|---|---|---|---|---|---|
-{{- range .}}
-| {{.ID}} | {{.Title | replace "|" "\\|"}} | {{.Severity | severity}} | {{join ", " .Packages}} | {{join ", " .CVEs}} | {{if .Ignored}}{{.IgnoreReason | replace "|" "\\|"}}{{else}}-{{end}} |
+
+{{- range .Meta}}
+- **{{.Label}}:** {{.Value}}
 {{- end}}
+
+{{template "audit-details" (dict "Results" .Results "Label" "PURLs")}}
+
+{{template "audit-footer" .}}

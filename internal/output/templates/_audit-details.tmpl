@@ -1,0 +1,41 @@
+{{- define "audit-details" -}}
+{{- $label := .Label -}}
+{{- range .Results}}
+
+## {{.ID}}{{with .Title}} : {{.}}{{end}}
+
+- **Severity:** {{.Severity | severity}}
+{{- if gt .CVSSScore 0.0}}
+- **CVSS Score:** {{printf "%.1f" .CVSSScore}}
+{{- end}}
+{{- if .CVEs}}
+- **CVEs:** {{join ", " .CVEs}}
+{{- end}}
+{{- if .CWEs}}
+- **Weaknesses:** {{join ", " .CWEs}}
+{{- end}}
+{{- if .Packages}}
+- **{{$label}}:**
+{{- range .Packages}}
+  - {{.}}
+{{- end}}
+{{- end}}
+{{- if .URL}}
+- **Source:** <{{.URL}}>
+{{- end}}
+- **ZEN SecDB:** <https://secdb.nttzen.cloud/security-advisory/detail/{{.ID}}>
+{{- if .Ignored}}
+- **Ignored:** ⚠️ {{.IgnoreReason}}
+{{- end}}
+{{- else}}
+
+_No vulnerabilities found._
+{{- end}}
+{{- end}}
+
+{{- define "audit-footer"}}
+
+---
+
+_Report generated on {{ dateInZone "2006-01-02 15:04:05 MST" now "UTC" }}{{ with .BaseURL }} - <{{ . }}>{{ end }}_
+{{- end}}
