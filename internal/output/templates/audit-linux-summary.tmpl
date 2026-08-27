@@ -1,0 +1,7 @@
+# Linux Audit - Summary
+
+{{- range .Meta}}
+- **{{.Label}}:** {{.Value}}
+{{- end}}
+
+{{template "audit-summary" (dict "Results" .Results "Label" "Package")}}
