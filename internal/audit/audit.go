@@ -9,7 +9,11 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
+
+	"github.com/giterlizzi/secdb-cli/internal/client"
+	"github.com/giterlizzi/secdb-cli/internal/report"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	packageurl "github.com/package-url/packageurl-go"
@@ -42,37 +46,19 @@ var SeverityLevels = map[string]int{
 	"critical": 5, "high": 4, "medium": 3, "moderate": 3, "low": 2, "info": 1, "unknown": 1, "": 0,
 }
 
-func OverallSeverity(rawResults []map[string]interface{}, ignoreFile *IgnoreFile) string {
+func OverallSeverity(results []client.AuditItem, ignoreFile *IgnoreFile) string {
 	maxSeverity := ""
 
-	for _, r := range rawResults {
-		pkg, _ := r["package"].(string)
-		advisories, _ := r["advisories"].([]interface{})
-
-		for _, a := range advisories {
-			adv, ok := a.(map[string]interface{})
-
-			if !ok {
-				continue
-			}
-
-			severity := strings.ToLower(fmt.Sprint(adv["severity"]))
+	for _, r := range results {
+		for _, adv := range r.Advisories {
 
 			if ignoreFile != nil {
-				id := adv["id"].(string)
-
-				cvesRaw, _ := adv["cves"].([]interface{})
-				cves := make([]string, 0, len(cvesRaw))
-				for _, c := range cvesRaw {
-					cves = append(cves, c.(string))
-				}
-
-				if ignored, _ := ignoreFile.IsIgnored(id, cves, pkg); ignored {
+				if ignored, _ := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.Package); ignored {
 					continue
 				}
-
 			}
 
+			severity := strings.ToLower(adv.Severity)
 			if SeverityLevels[severity] > SeverityLevels[maxSeverity] {
 				maxSeverity = severity
 			}
@@ -81,38 +67,26 @@ func OverallSeverity(rawResults []map[string]interface{}, ignoreFile *IgnoreFile
 	return maxSeverity
 }
 
-func SummarizePURLAudit(rawResults []map[string]interface{}) []PackageResult {
-	out := make([]PackageResult, 0, len(rawResults))
+func SummarizePURLAudit(results []client.AuditItem) []PackageResult {
+	out := make([]PackageResult, 0, len(results))
 
-	for _, r := range rawResults {
-		pkg, _ := r["package"].(string)
-		advisories, _ := r["advisories"].([]interface{})
-
+	for _, r := range results {
 		cveSeen := make(map[string]bool)
 		cweSeen := make(map[string]bool)
 		maxSeverity := ""
 
-		for _, a := range advisories {
-			adv, ok := a.(map[string]interface{})
-
-			if !ok {
-				continue
-			}
-
-			severity := strings.ToLower(fmt.Sprint(adv["severity"]))
+		for _, adv := range r.Advisories {
+			severity := strings.ToLower(adv.Severity)
 			if SeverityLevels[severity] > SeverityLevels[maxSeverity] {
 				maxSeverity = severity
 			}
 
-			cvesRaw, _ := adv["cves"].([]interface{})
-			cwesRaw, _ := adv["weaknesses"].([]map[string]interface{})
-
-			for _, cve := range cvesRaw {
-				cveSeen[cve.(string)] = true
+			for _, id := range adv.CVEs {
+				cveSeen[id] = true
 			}
 
-			for _, cwe := range cwesRaw {
-				cweSeen[cwe["id"].(string)] = true
+			for _, cwe := range adv.Weaknesses {
+				cweSeen[cwe.ID] = true
 			}
 		}
 
@@ -123,90 +97,69 @@ func SummarizePURLAudit(rawResults []map[string]interface{}) []PackageResult {
 		sort.Slice(cwes, func(i, j int) bool { return cwes[i] > cwes[j] })
 
 		out = append(out, PackageResult{
-			Package:       pkg,
+			Package:       r.Package,
 			CVEs:          cves,
 			CWEs:          cwes,
-			AdvisoryCount: len(advisories),
+			AdvisoryCount: len(r.Advisories),
 			MaxSeverity:   maxSeverity,
 		})
 	}
 	return out
 }
 
-func GroupByAdvisory(rawResults []map[string]interface{}, ignoreFile *IgnoreFile) []AdvisoryResult {
+func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile) report.Report {
 	byID := make(map[string]*AdvisoryResult)
 	var order []string
+	var ignoredCount int
 
-	for _, r := range rawResults {
-		pkg, _ := r["package"].(string)
-		advisories, _ := r["advisories"].([]interface{})
+	r := report.Report{}
 
-		for _, a := range advisories {
-			adv, ok := a.(map[string]interface{})
-			if !ok {
-				continue
-			}
+	for _, res := range results {
+		for _, adv := range res.Advisories {
 
-			id, _ := adv["id"].(string)
-			if id == "" {
-				continue
-			}
-
-			if _, exists := byID[id]; !exists {
-				title, _ := adv["title"].(string)
-				summary, _ := adv["summary"].(string)
-				description, _ := adv["description"].(string)
-				url, _ := adv["url"].(string)
-				severity, _ := adv["severity"].(string)
-
-				cvesRaw, _ := adv["cves"].([]interface{})
-				cves := make([]string, 0, len(cvesRaw))
-
-				cwesRaw, _ := adv["weaknesses"].([]map[string]interface{})
+			if _, exists := byID[adv.ID]; !exists {
+				cwesRaw := adv.Weaknesses
 				cwes := make([]string, 0, len(cwesRaw))
 
-				cvssArray, _ := adv["cvss"].([]map[string]interface{})
+				cvssArray := adv.CVSS
 				cvssScore := 0.0
 				cvssVersion := 0.0
 
-				for _, c := range cvesRaw {
-					cves = append(cves, c.(string))
-				}
-
 				for _, w := range cwesRaw {
-					cwes = append(cwes, w["id"].(string))
+					cwes = append(cwes, w.ID)
 				}
 
 				for _, cvss := range cvssArray {
-					score := cvss["base_score"].(float64)
-					version := cvss["version"].(float64)
-					if cvssVersion < version {
-						cvssScore = score
+					// Keep the score of the highest CVSS version available.
+					if cvss.Version >= cvssVersion {
+						cvssVersion = cvss.Version
+						cvssScore = cvss.BaseScore
 					}
 				}
 
-				sort.Slice(cves, func(i, j int) bool { return cves[i] > cves[j] })
-				sort.Slice(cwes, func(i, j int) bool { return cwes[i] > cwes[j] })
+				ignored, reason := ignoreFile.IsIgnored(adv.ID, adv.CVEs, res.Package)
 
-				ignored, reason := ignoreFile.IsIgnored(id, cves, pkg)
+				if ignored {
+					ignoredCount++
+				}
 
-				byID[id] = &AdvisoryResult{
-					ID:           id,
-					Title:        title,
-					Summary:      summary,
-					Description:  description,
-					URL:          url,
-					Severity:     strings.ToLower(severity),
-					CVEs:         cves,
+				byID[adv.ID] = &AdvisoryResult{
+					ID:           adv.ID,
+					Title:        adv.Title,
+					Summary:      adv.Summary,
+					Description:  adv.Description,
+					URL:          adv.URL,
+					Severity:     strings.ToLower(adv.Severity),
+					CVEs:         adv.CVEs,
 					CWEs:         cwes,
 					CVSSScore:    cvssScore,
 					Ignored:      ignored,
 					IgnoreReason: reason,
 				}
 
-				order = append(order, id)
+				order = append(order, adv.ID)
 			}
-			byID[id].Packages = append(byID[id].Packages, pkg)
+			byID[adv.ID].Packages = append(byID[adv.ID].Packages, res.Package)
 		}
 	}
 
@@ -214,7 +167,24 @@ func GroupByAdvisory(rawResults []map[string]interface{}, ignoreFile *IgnoreFile
 	for _, id := range order {
 		out = append(out, *byID[id])
 	}
-	return out
+
+	// Most severe first (then higher CVSS, then ID) so the details view leads
+	// with what matters; ties keep a stable, deterministic order.
+	sort.SliceStable(out, func(i, j int) bool {
+		si, sj := SeverityLevels[out[i].Severity], SeverityLevels[out[j].Severity]
+		if si != sj {
+			return si > sj
+		}
+		if out[i].CVSSScore != out[j].CVSSScore {
+			return out[i].CVSSScore > out[j].CVSSScore
+		}
+		return out[i].ID < out[j].ID
+	})
+
+	r.Results = out
+	r.AddMeta(report.MetaItem{Label: "Ignored", Value: strconv.Itoa(ignoredCount)})
+
+	return r
 }
 
 func ValidatePURLs(purls []string) []string {
