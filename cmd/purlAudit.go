@@ -5,10 +5,12 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
 	"github.com/giterlizzi/secdb-cli/internal/output"
+	"github.com/giterlizzi/secdb-cli/internal/report"
 	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/MakeNowJust/heredoc/v2"
@@ -24,7 +26,7 @@ var (
 )
 
 var purlAuditCmd = &cobra.Command{
-	Use: "purl <purl1> <purl2> ...",
+	Use: "purl <PURL...>",
 	Example: heredoc.Doc(`
 		Simple:
 		  	secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1
@@ -73,13 +75,23 @@ var purlAuditCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		var purls []string
+		var source string
 		var err error
 
 		switch {
 		case sbomFile != "":
 			purls, err = audit.ReadPURLsFromSBOM(sbomFile)
+			source = "SBOM (" + sbomFile + ")"
 		default:
 			purls, err = util.ReadIdentifiers(args, purlFile)
+			switch {
+			case len(args) > 0:
+				source = "arguments"
+			case purlFile != "":
+				source = "file (" + purlFile + ")"
+			default:
+				source = "stdin"
+			}
 		}
 		if err != nil {
 			return err
@@ -104,20 +116,34 @@ var purlAuditCmd = &cobra.Command{
 
 		switch outputFormat {
 		case "text":
+			meta := []report.MetaItem{
+				{Label: "Source", Value: source},
+				{Label: "PURLs scanned", Value: strconv.Itoa(len(purls))},
+			}
+
 			switch auditView {
 			case "summary":
-				if err := output.RenderText(os.Stdout, audit.SummarizePURLAudit(data), "audit-purl-summary"); err != nil {
+				r := report.Report{Results: audit.SummarizePURLAudit(data)}
+				r.PrependMeta(meta...)
+				if err := output.RenderText(os.Stdout, r, "audit-purl-summary"); err != nil {
 					return fmt.Errorf("failed to render summary: %w", err)
 				}
 			case "details":
-				if err := output.RenderText(os.Stdout, audit.GroupByAdvisory(data, ignoreFile), "audit-purl-details"); err != nil {
+				r := audit.GroupByAdvisory(data, ignoreFile)
+				r.BaseURL = client.BaseURL()
+				r.PrependMeta(meta...)
+				if err := output.RenderText(os.Stdout, r, "audit-purl-details"); err != nil {
 					return fmt.Errorf("failed to render details: %w", err)
 				}
 			default:
 				return fmt.Errorf("invalid --view option: %q (valid options: summary, details)", auditView)
 			}
 		case "sarif":
-			return output.WriteSARIF(os.Stdout, audit.GroupByAdvisory(data, ignoreFile), sbomFile)
+			r := audit.GroupByAdvisory(data, ignoreFile)
+			return output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), sbomFile)
+		case "csv":
+			r := audit.GroupByAdvisory(data, ignoreFile)
+			return output.WriteCSV(os.Stdout, r, "audit-details-csv")
 		default:
 			if err := output.Render(os.Stdout, data, output.Format(outputFormat), newOutputOptions()); err != nil {
 				return fmt.Errorf("failed to render output: %w", err)
