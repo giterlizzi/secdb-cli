@@ -87,7 +87,7 @@ func SSVCDecisionMarkdown(decision string) string {
 	case "track*":
 		emoji = "🟡"
 	case "track":
-		emoji = "⚪"
+		emoji = "🟢"
 	default:
 		return decision
 	}

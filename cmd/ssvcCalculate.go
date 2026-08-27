@@ -90,9 +90,14 @@ var ssvcCalculateCmd = &cobra.Command{
 
 func init() {
 	ssvcCmd.AddCommand(ssvcCalculateCmd)
-	ssvcCalculateCmd.Flags().StringVarP(&cvesFile, "file", "f", "", "Read CVEs from a file instead of arguments/stdin")
-	ssvcCalculateCmd.Flags().StringVar(&missionPrevalence, "mission-prevalence", "", "Mission prevalence: minimal, support, or essential (required)")
-	ssvcCalculateCmd.Flags().StringVar(&publicWellBeingImpact, "public-well-being-impact", "", "Public well-being impact: minimal, material, or irreversible (required)")
+
+	ssvcCalculateCmd.Flags().StringVarP(&cvesFile, "file", "f", "",
+		"Read CVEs from a file instead of arguments/stdin")
+	ssvcCalculateCmd.Flags().StringVar(&missionPrevalence, "mission-prevalence", "",
+		"Mission prevalence: minimal, support, or essential (required)")
+	ssvcCalculateCmd.Flags().StringVar(&publicWellBeingImpact, "public-well-being-impact", "",
+		"Public well-being impact: minimal, material, or irreversible (required)")
+
 	ssvcCalculateCmd.MarkFlagRequired("mission-prevalence")
 	ssvcCalculateCmd.MarkFlagRequired("public-well-being-impact")
 }
