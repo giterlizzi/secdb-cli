@@ -45,7 +45,7 @@ func LoadIgnoreFile(path string) (*IgnoreFile, error) {
 	return &f, nil
 }
 
-func (f *IgnoreFile) IsIgnored(advisoryID string, cves []string, pkg string) (bool, string) {
+func (f *IgnoreFile) IsIgnored(advisoryID string, cves []string, purl string) (bool, string) {
 	now := time.Now()
 
 	for _, rule := range f.Ignore {
@@ -64,13 +64,13 @@ func (f *IgnoreFile) IsIgnored(advisoryID string, cves []string, pkg string) (bo
 		matched := rule.Vulnerability != "" && (rule.Vulnerability == advisoryID || slices.Contains(cves, rule.Vulnerability))
 
 		if matched && rule.Package != nil {
-			purl, _ := packageurl.FromString(pkg)
+			parsed, _ := packageurl.FromString(purl)
 
-			if rule.Package.Name != "" && !(purl.Name == rule.Package.Name) {
+			if rule.Package.Name != "" && !(parsed.Name == rule.Package.Name) {
 				matched = false
 			}
 
-			if matched && rule.Package.Version != "" && !(purl.Version == rule.Package.Version) {
+			if matched && rule.Package.Version != "" && !(parsed.Version == rule.Package.Version) {
 				matched = false
 			}
 		}
