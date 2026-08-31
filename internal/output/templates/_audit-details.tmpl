@@ -5,6 +5,9 @@
 ## {{.ID}}{{with .Title}} : {{.}}{{end}}
 
 - **Severity:** {{.Severity | severity}}
+{{- if .Unfixed}}
+- **Fix:** ❌ No fix available for the affected package
+{{- end}}
 {{- if gt .CVSSScore 0.0}}
 - **CVSS Score:** {{printf "%.1f" .CVSSScore}}
 {{- end}}

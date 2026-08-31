@@ -40,20 +40,27 @@ type AdvisoryResult struct {
 	URL          string
 	Ignored      bool
 	IgnoreReason string
+	Unfixed      bool
 }
 
 var SeverityLevels = map[string]int{
 	"critical": 5, "high": 4, "medium": 3, "moderate": 3, "low": 2, "info": 1, "unknown": 1, "": 0,
 }
 
-func OverallSeverity(results []client.AuditItem, ignoreFile *IgnoreFile) string {
+func OverallSeverity(results []client.AuditItem, ignoreFile *IgnoreFile, showUnfixed bool) string {
 	maxSeverity := ""
 
 	for _, r := range results {
 		for _, adv := range r.Advisories {
 
+			if !showUnfixed && IsUnfixed(r.PURL, adv) {
+				slog.Debug("unfixed", "purl", r.PURL, "advisory", adv.ID)
+				continue
+			}
+
 			if ignoreFile != nil {
-				if ignored, _ := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.Package); ignored {
+				if ignored, _ := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.PURL); ignored {
+					slog.Debug("ignored", "advisory", adv.ID, "cves", adv.CVEs, "purl", r.PURL)
 					continue
 				}
 			}
@@ -67,15 +74,24 @@ func OverallSeverity(results []client.AuditItem, ignoreFile *IgnoreFile) string 
 	return maxSeverity
 }
 
-func SummarizePURLAudit(results []client.AuditItem) []PackageResult {
+func SummarizePURLAudit(results []client.AuditItem, showUnfixed bool) []PackageResult {
 	out := make([]PackageResult, 0, len(results))
 
 	for _, r := range results {
 		cveSeen := make(map[string]bool)
 		cweSeen := make(map[string]bool)
 		maxSeverity := ""
+		advisoryCount := 0
 
 		for _, adv := range r.Advisories {
+
+			if !showUnfixed && IsUnfixed(r.PURL, adv) {
+				slog.Debug("unfixed", "purl", r.PURL, "advisory", adv.ID)
+				continue
+			}
+
+			advisoryCount++
+
 			severity := strings.ToLower(adv.Severity)
 			if SeverityLevels[severity] > SeverityLevels[maxSeverity] {
 				maxSeverity = severity
@@ -90,6 +106,12 @@ func SummarizePURLAudit(results []client.AuditItem) []PackageResult {
 			}
 		}
 
+		// Every advisory was filtered out (e.g. all unfixed): skip the package so
+		// the summary doesn't show a row with no visible findings.
+		if advisoryCount == 0 {
+			continue
+		}
+
 		cves := slices.Collect(maps.Keys(cveSeen))
 		cwes := slices.Collect(maps.Keys(cweSeen))
 
@@ -100,22 +122,29 @@ func SummarizePURLAudit(results []client.AuditItem) []PackageResult {
 			Package:       r.Package,
 			CVEs:          cves,
 			CWEs:          cwes,
-			AdvisoryCount: len(r.Advisories),
+			AdvisoryCount: advisoryCount,
 			MaxSeverity:   maxSeverity,
 		})
 	}
 	return out
 }
 
-func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile) report.Report {
+func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnfixed bool) report.Report {
 	byID := make(map[string]*AdvisoryResult)
 	var order []string
 	var ignoredCount int
 
-	r := report.Report{}
+	rep := report.Report{}
 
-	for _, res := range results {
-		for _, adv := range res.Advisories {
+	for _, r := range results {
+		for _, adv := range r.Advisories {
+
+			unfixed := IsUnfixed(r.PURL, adv)
+
+			if !showUnfixed && unfixed {
+				slog.Debug("unfixed", "purl", r.PURL, "advisory", adv.ID)
+				continue
+			}
 
 			if _, exists := byID[adv.ID]; !exists {
 				cwesRaw := adv.Weaknesses
@@ -137,7 +166,7 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile) report.
 					}
 				}
 
-				ignored, reason := ignoreFile.IsIgnored(adv.ID, adv.CVEs, res.Package)
+				ignored, reason := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.Package)
 
 				if ignored {
 					ignoredCount++
@@ -155,11 +184,15 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile) report.
 					CVSSScore:    cvssScore,
 					Ignored:      ignored,
 					IgnoreReason: reason,
+					Unfixed:      unfixed,
 				}
 
 				order = append(order, adv.ID)
 			}
-			byID[adv.ID].Packages = append(byID[adv.ID].Packages, res.Package)
+			byID[adv.ID].Packages = append(byID[adv.ID].Packages, r.Package)
+			if unfixed {
+				byID[adv.ID].Unfixed = true
+			}
 		}
 	}
 
@@ -181,10 +214,29 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile) report.
 		return out[i].ID < out[j].ID
 	})
 
-	r.Results = out
-	r.AddMeta(report.MetaItem{Label: "Ignored", Value: strconv.Itoa(ignoredCount)})
+	rep.Results = out
 
-	return r
+	if ignoredCount > 0 {
+		rep.AddMeta(report.MetaItem{Label: "Ignored", Value: strconv.Itoa(ignoredCount)})
+	}
+
+	return rep
+}
+
+// UnfixedCount returns how many advisories are hidden because no fix is
+// available for the audited package (remediation "none_available"). An
+// advisory is counted once even when several audited packages reference it. It
+// lets the caller warn that findings were hidden and hint at --show-unfixed.
+func UnfixedCount(results []client.AuditItem) int {
+	seen := make(map[string]bool)
+	for _, r := range results {
+		for _, adv := range r.Advisories {
+			if IsUnfixed(r.PURL, adv) {
+				seen[adv.ID] = true
+			}
+		}
+	}
+	return len(seen)
 }
 
 func ValidatePURLs(purls []string) []string {

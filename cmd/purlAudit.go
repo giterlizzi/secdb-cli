@@ -23,6 +23,7 @@ var (
 	auditView      string
 	failOnSeverity string
 	ignoreFilePath string
+	showUnfixed    bool
 )
 
 var purlAuditCmd = &cobra.Command{
@@ -121,15 +122,24 @@ var purlAuditCmd = &cobra.Command{
 				{Label: "PURLs scanned", Value: strconv.Itoa(len(purls))},
 			}
 
+			if !showUnfixed {
+				if n := audit.UnfixedCount(data); n > 0 {
+					meta = append(meta, report.MetaItem{
+						Label: "Unfixed",
+						Value: fmt.Sprintf("⚠️ %d hidden (run with --show-unfixed to list them)", n),
+					})
+				}
+			}
+
 			switch auditView {
 			case "summary":
-				r := report.Report{Results: audit.SummarizePURLAudit(data)}
+				r := report.Report{Results: audit.SummarizePURLAudit(data, showUnfixed)}
 				r.PrependMeta(meta...)
 				if err := output.RenderText(os.Stdout, r, "audit-purl-summary"); err != nil {
 					return fmt.Errorf("failed to render summary: %w", err)
 				}
 			case "details":
-				r := audit.GroupByAdvisory(data, ignoreFile)
+				r := audit.GroupByAdvisory(data, ignoreFile, showUnfixed)
 				r.BaseURL = client.BaseURL()
 				r.PrependMeta(meta...)
 				if err := output.RenderText(os.Stdout, r, "audit-purl-details"); err != nil {
@@ -139,10 +149,10 @@ var purlAuditCmd = &cobra.Command{
 				return fmt.Errorf("invalid --view option: %q (valid options: summary, details)", auditView)
 			}
 		case "sarif":
-			r := audit.GroupByAdvisory(data, ignoreFile)
+			r := audit.GroupByAdvisory(data, ignoreFile, showUnfixed)
 			return output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), sbomFile)
 		case "csv":
-			r := audit.GroupByAdvisory(data, ignoreFile)
+			r := audit.GroupByAdvisory(data, ignoreFile, showUnfixed)
 			return output.WriteCSV(os.Stdout, r, "audit-details-csv")
 		default:
 			if err := output.Render(os.Stdout, data, output.Format(outputFormat), newOutputOptions()); err != nil {
@@ -156,7 +166,7 @@ var purlAuditCmd = &cobra.Command{
 				return fmt.Errorf("invalid --fail-on severity: %q (valid options: critical, high, medium, low, info)", failOnSeverity)
 			}
 
-			if maxSeverity := audit.OverallSeverity(data, ignoreFile); maxSeverity != "" {
+			if maxSeverity := audit.OverallSeverity(data, ignoreFile, showUnfixed); maxSeverity != "" {
 				if audit.SeverityLevels[maxSeverity] >= audit.SeverityLevels[threshold] {
 					fmt.Fprintf(os.Stderr, "audit failed: package has a vulnerability with severity %q (fail-on=%q)\n", maxSeverity, failOnSeverity)
 					os.Exit(2)
@@ -182,4 +192,6 @@ func init() {
 		"Fail the audit if any package has a vulnerability with the specified severity (critical, high, medium, low, info)")
 	purlAuditCmd.Flags().StringVar(&ignoreFilePath, "ignore-file", ".secdbignore",
 		"YAML file of ignore rules for --fail-on (doesn't hide findings from the report, only from the exit code)")
+	purlAuditCmd.Flags().BoolVar(&showUnfixed, "show-unfixed", false,
+		"Also report vulnerabilities that have no fix available (hidden by default)")
 }
