@@ -149,6 +149,20 @@ ignore:
 
 A rule matches on `vulnerability` (advisory ID or CVE) and, optionally, narrows to a specific `package.name`/`package.version`. It's a no-op if the audit result doesn't already have a matching, non-expired rule.
 
+**Showing vulnerabilities with no available fix**
+
+An advisory can affect a package for which no fix has been released yet (CSAF remediation status `none_available`). By default these "unfixed" findings are **hidden** from every view (`summary`, `details`, `sarif`, `csv`) and excluded from the `--fail-on` check, so the report focuses on actionable vulnerabilities. When any are hidden, the `--output=text` header shows a warning row with their count:
+
+```
+Unfixed: ⚠️ 98 hidden (run with --show-unfixed to list them)
+```
+
+Pass `--show-unfixed` to include them; in the `details` view each such advisory is marked `Fix: ❌ No fix available for the affected package`.
+
+```bash
+secdb audit purl --sbom bom.json --show-unfixed
+```
+
 The `--output=text` report (both `--view` modes) is preceded by a short metadata header: the input source (arguments / `--file` / stdin / `--sbom`) and the number of PURLs scanned. The header is text-only; it never appears in `json`/`yaml`/`sarif` output.
 
 Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed as arguments, read from a file with `--file`/`-f` (one PURL per line, `#` for comments), from CycloneDX `--sbom` file, or piped via stdin.
@@ -160,6 +174,7 @@ Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed a
 | `-v`, `--view` | `summary` *(default)*, one row per package, or `details`, one row per advisory (only applies to `--output=text`) |
 | `--fail-on` | Exit with status `2` if any package has a vulnerability at or above the given severity (`critical`, `high`, `medium`, `low`, `info`) |
 | `--ignore-file` | YAML file of accepted-risk rules that exclude matching findings from `--fail-on` (default `.secdbignore`) |
+| `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
 
 ### Audit a Linux system (EXPERIMENTAL)
 
@@ -181,7 +196,7 @@ Uses your system `ssh` client, so `~/.ssh/config`, the SSH agent and `known_host
 
 The command runs only fixed, read-only commands on the target: reading `/etc/os-release`, `uname -m`, and the distribution's package-list command (`dpkg-query` / `rpm` / `apk` / Slackware `/var/log/packages`). Supported distributions include Debian/Ubuntu, RHEL/Rocky Linux/AlmaLinux/Oracle Linux/Amazon Linux/Fedora/SUSE, Alpine Linux and Slackware Linux.
 
-`--view`, `--fail-on`, `--output=sarif`/`--output=csv` and `--ignore-file` work exactly as for `audit purl`. The `--output=text` report is preceded by a metadata header showing the target (`local`, `user @ host:port`, or the Docker image/container), OS/version, architecture, and packages scanned. Progress lines (`Detected ...`, `Auditing ...`) are written to stderr only when it's a terminal, so piped/redirected output stays clean.
+`--view`, `--fail-on`, `--output=sarif`/`--output=csv`, `--ignore-file` and `--show-unfixed` work exactly as for `audit purl`. The `--output=text` report is preceded by a metadata header showing the target (`local`, `user @ host:port`, or the Docker image/container), OS/version, architecture, and packages scanned. Progress lines (`Detected ...`, `Auditing ...`) are written to stderr only when it's a terminal, so piped/redirected output stays clean.
 
 | Flag | Description |
 |---|---|
@@ -193,6 +208,7 @@ The command runs only fixed, read-only commands on the target: reading `/etc/os-
 | `-v`, `--view` | `summary` *(default)* or `details` (only applies to `--output=text`) |
 | `--fail-on` | Exit with status `2` at or above the given severity |
 | `--ignore-file` | YAML file of accepted-risk rules (default `.secdbignore`) |
+| `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
 
 ### Audit a Docker image or container (EXPERIMENTAL)
 
@@ -203,7 +219,7 @@ secdb audit docker --image debian:12
 secdb audit docker --container my-running-container
 ```
 
-The same read-only collection, distribution support, and `--view` / `--fail-on` / `--output=sarif` / `--output=csv` / `--ignore-file` behavior as `audit linux` apply.
+The same read-only collection, distribution support, and `--view` / `--fail-on` / `--output=sarif` / `--output=csv` / `--ignore-file` / `--show-unfixed` behavior as `audit linux` apply.
 
 | Flag | Description |
 |---|---|
@@ -212,6 +228,7 @@ The same read-only collection, distribution support, and `--view` / `--fail-on` 
 | `-v`, `--view` | `summary` *(default)* or `details` (only applies to `--output=text`) |
 | `--fail-on` | Exit with status `2` at or above the given severity |
 | `--ignore-file` | YAML file of accepted-risk rules (default `.secdbignore`) |
+| `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
 
 ### Calculate SSVC
 
