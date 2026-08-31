@@ -19,7 +19,8 @@ var versionCmd = &cobra.Command{
 			Include this information when reporting a bug.
 		`),
 	Example: heredoc.Doc(`
-			secdb version`),
+			secdb version
+		`),
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Printf("secdb %s (commit %s (%s), built %s)\n",
