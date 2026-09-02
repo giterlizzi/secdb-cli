@@ -17,16 +17,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// addPackageAuditFlags registers the flags shared by the inventory-based audit
-// subcommands (audit linux, audit docker): --view, --fail-on and --ignore-file.
-func addPackageAuditFlags(cmd *cobra.Command, view, failOn, ignoreFile *string, showUnfixed *bool) {
-	cmd.Flags().StringVarP(view, "view", "v", "summary",
+type auditOptions struct {
+	view        string
+	failOn      string
+	ignoreFile  string
+	showUnfixed bool
+}
+
+// addFlags register the shared flags
+func (o *auditOptions) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&o.view, "view", "v", "summary",
 		"View mode for audit results (summary, details)")
-	cmd.Flags().StringVar(failOn, "fail-on", "",
+	cmd.Flags().StringVar(&o.failOn, "fail-on", "",
 		"Fail the audit if any package has a vulnerability with the specified severity (critical, high, medium, low, info)")
-	cmd.Flags().StringVar(ignoreFile, "ignore-file", ".secdbignore",
+	cmd.Flags().StringVar(&o.ignoreFile, "ignore-file", ".secdbignore",
 		"YAML file of ignore rules for --fail-on (doesn't hide findings from the report, only from the exit code)")
-	cmd.Flags().BoolVar(showUnfixed, "show-unfixed", false,
+	cmd.Flags().BoolVar(&o.showUnfixed, "show-unfixed", false,
 		"Also report vulnerabilities that have no fix available (hidden by default)")
 }
 
@@ -34,13 +40,13 @@ func addPackageAuditFlags(cmd *cobra.Command, view, failOn, ignoreFile *string, 
 // against ZEN SecDB, renders the result in the requested format, and applies
 // --fail-on. It is the shared body of the audit linux and audit docker commands;
 // they differ only in how they build the inventory.Target.
-func runPackageAudit(target inventory.Target, view, failOn, ignoreFilePath string, showUnfixed bool) error {
+func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 	info, err := inventory.Collect(target)
 	if err != nil {
 		return err
 	}
 
-	ignoreFile, err := audit.LoadIgnoreFile(ignoreFilePath)
+	ignoreFile, err := audit.LoadIgnoreFile(opts.ignoreFile)
 	if err != nil {
 		return err
 	}
@@ -63,7 +69,7 @@ func runPackageAudit(target inventory.Target, view, failOn, ignoreFilePath strin
 			{Label: "Packages scanned", Value: strconv.Itoa(len(info.Packages))},
 		}
 
-		if !showUnfixed {
+		if !opts.showUnfixed {
 			if n := audit.UnfixedCount(data); n > 0 {
 				meta = append(meta, report.MetaItem{
 					Label: "Unfixed",
@@ -72,28 +78,28 @@ func runPackageAudit(target inventory.Target, view, failOn, ignoreFilePath strin
 			}
 		}
 
-		switch view {
+		switch opts.view {
 		case "summary":
-			r := report.Report{Results: audit.SummarizePURLAudit(data, showUnfixed)}
+			r := report.Report{Results: audit.SummarizePURLAudit(data, opts.showUnfixed)}
 			r.PrependMeta(meta...)
 			if err := output.RenderText(os.Stdout, r, "audit-linux-summary"); err != nil {
 				return fmt.Errorf("failed to render summary: %w", err)
 			}
 		case "details":
-			r := audit.GroupByAdvisory(data, ignoreFile, showUnfixed)
+			r := audit.GroupByAdvisory(data, ignoreFile, opts.showUnfixed)
 			r.BaseURL = client.BaseURL()
 			r.PrependMeta(meta...)
 			if err := output.RenderText(os.Stdout, r, "audit-linux-details"); err != nil {
 				return fmt.Errorf("failed to render details: %w", err)
 			}
 		default:
-			return fmt.Errorf("invalid --view option: %q (valid options: summary, details)", view)
+			return fmt.Errorf("invalid --view option: %q (valid options: summary, details)", opts.view)
 		}
 	case "sarif":
-		r := audit.GroupByAdvisory(data, ignoreFile, showUnfixed)
+		r := audit.GroupByAdvisory(data, ignoreFile, opts.showUnfixed)
 		return output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), info.OS+"/"+info.Version)
 	case "csv":
-		r := audit.GroupByAdvisory(data, ignoreFile, showUnfixed)
+		r := audit.GroupByAdvisory(data, ignoreFile, opts.showUnfixed)
 		return output.WriteCSV(os.Stdout, r, "audit-details-csv")
 	default:
 		if err := output.Render(os.Stdout, data, output.Format(outputFormat), newOutputOptions()); err != nil {
@@ -101,15 +107,15 @@ func runPackageAudit(target inventory.Target, view, failOn, ignoreFilePath strin
 		}
 	}
 
-	if failOn != "" {
-		threshold := strings.ToLower(failOn)
+	if opts.failOn != "" {
+		threshold := strings.ToLower(opts.failOn)
 		if _, ok := audit.SeverityLevels[threshold]; !ok {
-			return fmt.Errorf("invalid --fail-on severity: %q (valid options: critical, high, medium, low, info)", failOn)
+			return fmt.Errorf("invalid --fail-on severity: %q (valid options: critical, high, medium, low, info)", opts.failOn)
 		}
 
-		if maxSeverity := audit.OverallSeverity(data, ignoreFile, showUnfixed); maxSeverity != "" {
+		if maxSeverity := audit.OverallSeverity(data, ignoreFile, opts.showUnfixed); maxSeverity != "" {
 			if audit.SeverityLevels[maxSeverity] >= audit.SeverityLevels[threshold] {
-				fmt.Fprintf(os.Stderr, "audit failed: a package has a vulnerability with severity %q (fail-on=%q)\n", maxSeverity, failOn)
+				fmt.Fprintf(os.Stderr, "audit failed: a package has a vulnerability with severity %q (fail-on=%q)\n", maxSeverity, opts.failOn)
 				os.Exit(2)
 			}
 		}

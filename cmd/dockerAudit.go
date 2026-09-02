@@ -12,12 +12,9 @@ import (
 )
 
 var (
-	dockerImage       string
-	dockerContainer   string
-	dockerView        string
-	dockerFailOn      string
-	dockerIgnoreFile  string
-	dockerShowUnfixed bool
+	dockerImage     string
+	dockerContainer string
+	dockerOpts      auditOptions
 )
 
 var dockerAuditCmd = &cobra.Command{
@@ -58,7 +55,7 @@ var dockerAuditCmd = &cobra.Command{
 			Image:     dockerImage,
 			Container: dockerContainer,
 		}
-		return runPackageAudit(target, dockerView, dockerFailOn, dockerIgnoreFile, dockerShowUnfixed)
+		return runPackageAudit(target, &dockerOpts)
 	},
 }
 
@@ -70,5 +67,5 @@ func init() {
 	dockerAuditCmd.Flags().StringVar(&dockerContainer, "container", "",
 		"Audit a running local Docker container")
 
-	addPackageAuditFlags(dockerAuditCmd, &dockerView, &dockerFailOn, &dockerIgnoreFile, &dockerShowUnfixed)
+	dockerOpts.addFlags(dockerAuditCmd)
 }

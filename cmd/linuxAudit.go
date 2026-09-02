@@ -16,10 +16,7 @@ var (
 	linuxIdentityFile string
 	linuxConfigFile   string
 	linuxSudo         bool
-	linuxView         string
-	linuxFailOn       string
-	linuxIgnoreFile   string
-	linuxShowUnfixed  bool
+	linuxOpts         auditOptions
 )
 
 var linuxAuditCmd = &cobra.Command{
@@ -58,7 +55,7 @@ var linuxAuditCmd = &cobra.Command{
 			ConfigFile:   linuxConfigFile,
 			Sudo:         linuxSudo,
 		}
-		return runPackageAudit(target, linuxView, linuxFailOn, linuxIgnoreFile, linuxShowUnfixed)
+		return runPackageAudit(target, &linuxOpts)
 	},
 }
 
@@ -78,5 +75,5 @@ func init() {
 	linuxAuditCmd.Flags().BoolVar(&linuxSudo, "sudo", false,
 		"Prefix package-list commands with 'sudo -n'")
 
-	addPackageAuditFlags(linuxAuditCmd, &linuxView, &linuxFailOn, &linuxIgnoreFile, &linuxShowUnfixed)
+	linuxOpts.addFlags(linuxAuditCmd)
 }
