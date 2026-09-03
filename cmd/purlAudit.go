@@ -4,12 +4,9 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"strconv"
-	"strings"
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
-	"github.com/giterlizzi/secdb-cli/internal/output"
 	"github.com/giterlizzi/secdb-cli/internal/report"
 	"github.com/giterlizzi/secdb-cli/internal/util"
 
@@ -112,66 +109,18 @@ var purlAuditCmd = &cobra.Command{
 			return err
 		}
 
-		switch outputFormat {
-		case "text":
-			meta := []report.MetaItem{
+		return renderAudit(auditRenderConfig{
+			data:       data,
+			opts:       &purlOpts,
+			ignoreFile: ignoreFile,
+			baseURL:    client.BaseURL(),
+			meta: []report.MetaItem{
 				{Label: "Source", Value: source},
 				{Label: "PURLs scanned", Value: strconv.Itoa(len(purls))},
-			}
-
-			if !purlOpts.showUnfixed {
-				if n := audit.UnfixedCount(data); n > 0 {
-					meta = append(meta, report.MetaItem{
-						Label: "Unfixed",
-						Value: fmt.Sprintf("⚠️ %d hidden (run with --show-unfixed to list them)", n),
-					})
-				}
-			}
-
-			switch purlOpts.view {
-			case "summary":
-				r := report.Report{Results: audit.SummarizePURLAudit(data, purlOpts.showUnfixed)}
-				r.PrependMeta(meta...)
-				if err := output.RenderText(os.Stdout, r, "audit-purl-summary"); err != nil {
-					return fmt.Errorf("failed to render summary: %w", err)
-				}
-			case "details":
-				r := audit.GroupByAdvisory(data, ignoreFile, purlOpts.showUnfixed)
-				r.BaseURL = client.BaseURL()
-				r.PrependMeta(meta...)
-				if err := output.RenderText(os.Stdout, r, "audit-purl-details"); err != nil {
-					return fmt.Errorf("failed to render details: %w", err)
-				}
-			default:
-				return fmt.Errorf("invalid --view option: %q (valid options: summary, details)", purlOpts.view)
-			}
-		case "sarif":
-			r := audit.GroupByAdvisory(data, ignoreFile, purlOpts.showUnfixed)
-			return output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), sbomFile)
-		case "csv":
-			r := audit.GroupByAdvisory(data, ignoreFile, purlOpts.showUnfixed)
-			return output.WriteCSV(os.Stdout, r, "audit-details-csv")
-		default:
-			if err := output.Render(os.Stdout, data, output.Format(outputFormat), newOutputOptions()); err != nil {
-				return fmt.Errorf("failed to render output: %w", err)
-			}
-		}
-
-		if purlOpts.failOn != "" {
-			threshold := strings.ToLower(purlOpts.failOn)
-			if _, ok := audit.SeverityLevels[threshold]; !ok {
-				return fmt.Errorf("invalid --fail-on severity: %q (valid options: critical, high, medium, low, info)", purlOpts.failOn)
-			}
-
-			if maxSeverity := audit.OverallSeverity(data, ignoreFile, purlOpts.showUnfixed); maxSeverity != "" {
-				if audit.SeverityLevels[maxSeverity] >= audit.SeverityLevels[threshold] {
-					fmt.Fprintf(os.Stderr, "audit failed: package has a vulnerability with severity %q (fail-on=%q)\n", maxSeverity, purlOpts.failOn)
-					os.Exit(2)
-				}
-			}
-		}
-
-		return nil
+			},
+			template:    "audit-purl",
+			sarifSource: sbomFile,
+		})
 
 	},
 }
