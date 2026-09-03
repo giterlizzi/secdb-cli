@@ -15,12 +15,12 @@ var versionCmd = &cobra.Command{
 	Aliases: []string{"v"},
 	Short:   "Show version information for ZEN SecDB CLI",
 	Long: heredoc.Doc(`
-			Prints the installed secdb version and the commit it was built from.
-			Include this information when reporting a bug.
-		`),
+		Prints the installed secdb version and the commit it was built from.
+		Include this information when reporting a bug.
+	`),
 	Example: heredoc.Doc(`
-			secdb version
-		`),
+		secdb version
+	`),
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
 	RunE: func(cmd *cobra.Command, args []string) error {
 		fmt.Printf("secdb %s (commit %s (%s), built %s)\n",
