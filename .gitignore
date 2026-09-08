@@ -1,0 +1,17 @@
+dist/
+bin/
+vendor/
+
+# Editors and IDE
+.vscode
+.idea
+.DS_Store
+*.swp
+
+# Code coverage profiles and other test artifacts
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+.env
