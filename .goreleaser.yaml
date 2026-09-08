@@ -30,6 +30,9 @@ builds:
 
 archives:
   - name_template: "secdb-{{ .Os }}-{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        formats: [zip]
 
 checksum:
   name_template: "checksums.txt"
