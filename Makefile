@@ -2,6 +2,7 @@ MODULE      := github.com/giterlizzi/secdb-cli
 BIN_DIR     := bin
 DIST_DIR    := dist
 CGO_ENABLED := 0
+PREFIX      ?= $(HOME)/.local
 
 VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo v0.0.0)
 COMMIT_HASH := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
@@ -15,7 +16,7 @@ LDFLAGS := -X '$(MODULE)/internal/meta.Version=$(VERSION)' \
            -X '$(MODULE)/internal/meta.Branch=$(BRANCH)' \
            -X '$(MODULE)/internal/meta.BuildDate=$(BUILD_DATE)'
 
-.PHONY: all build release vet test coverage spdx-headers clean
+.PHONY: all build install release vet test coverage spdx-headers clean
 .PHONY: install-govulncheck govulncheck
 .PHONY: install-go-licenses notice check-licenses
 .PHONY: install-goreleaser goreleaser-build goreleaser-snapshot
@@ -27,6 +28,10 @@ build: ## Build the secdb binary into bin/
 	@mkdir -p $(BIN_DIR)
 	@echo "==> building secdb ($(VERSION), $(COMMIT_HASH))"
 	CGO_ENABLED=$(CGO_ENABLED) go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/secdb .
+
+install: build ## Install the secdb binary into $(PREFIX)/bin (default ~/.local/bin)
+	install -d $(DESTDIR)$(PREFIX)/bin
+	install -m 0755 $(BIN_DIR)/secdb $(DESTDIR)$(PREFIX)/bin/secdb
 
 release: test ## Run tests, then build a release binary (go build -a)
 	@mkdir -p $(BIN_DIR)
