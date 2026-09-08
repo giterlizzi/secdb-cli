@@ -5,8 +5,9 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/giterlizzi/secdb-cli/internal/meta"
+
+	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
 )
 
