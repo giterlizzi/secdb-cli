@@ -87,7 +87,7 @@ func collectOSRelease(t Target) (OSRelease, error) {
 func parseOSRelease(content string) OSRelease {
 	o := OSRelease{}
 
-	for _, line := range strings.Split(content, "\n") {
+	for line := range strings.SplitSeq(content, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -145,7 +145,7 @@ func collectPackages(t Target, osID string) ([]string, error) {
 	}
 
 	lines := []string{}
-	for _, line := range strings.Split(strings.TrimSpace(r.Stdout), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(r.Stdout), "\n") {
 		line = strings.TrimSpace(line)
 		if line != "" {
 			lines = append(lines, line)

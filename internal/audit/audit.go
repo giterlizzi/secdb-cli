@@ -166,7 +166,7 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 					}
 				}
 
-				ignored, reason := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.Package)
+				ignored, reason := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.PURL)
 
 				if ignored {
 					ignoredCount++
