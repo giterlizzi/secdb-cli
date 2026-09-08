@@ -27,16 +27,24 @@ type Client struct {
 	httpClient *http.Client
 }
 
-func NewClient(apiKey string) *Client {
+func NewClient() *Client {
 	return &Client{
 		baseURL:    defaultBaseURL,
-		apiKey:     apiKey,
 		httpClient: &http.Client{Timeout: 60 * time.Second},
 	}
 }
 
-func (c *Client) WithBaseURL(url string) *Client {
-	c.baseURL = strings.TrimRight(url, "/")
+func (c *Client) WithApiKey(apiKey string) *Client {
+	if apiKey != "" {
+		c.apiKey = apiKey
+	}
+	return c
+}
+
+func (c *Client) WithBaseURL(baseURL string) *Client {
+	if baseURL != "" {
+		c.baseURL = strings.TrimRight(baseURL, "/")
+	}
 	return c
 }
 

@@ -117,10 +117,9 @@ func printUpdateNoticeIfReady() {
 }
 
 func newSecDbClient() *client.Client {
-	c := client.NewClient(apiKey)
-	if baseURL != "" {
-		return c.WithBaseURL(baseURL)
-	}
+	c := client.NewClient().
+		WithApiKey(apiKey).
+		WithBaseURL(baseURL)
 	return c
 }
 
