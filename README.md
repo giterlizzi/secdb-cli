@@ -25,12 +25,13 @@ Pre-built binaries for Linux, macOS and Windows (amd64/arm64) are published on t
 
 ## Configuration
 
-| Environment variable    | Purpose                                                                |
-|-------------------------|------------------------------------------------------------------------|
-| `SECDB_API_KEY`         | API key sent as the `X-API-KEY` header on every request                |
-| `SECDB_NO_UPDATE_CHECK` | Set to any value to disable the background update check                |
-| `NO_COLOR`              | Print raw Markdown instead of ANSI-styled `text` output                |
-| `CI`                    | Automatically disables the background update check when set            |
+| Environment variable    | Purpose                                                                 |
+|-------------------------|-------------------------------------------------------------------------|
+| `SECDB_API_KEY`         | API key sent as the `X-API-KEY` header on every request                 |
+| `SECDB_DEBUG`           | Set to any value to enable debug logging to stderr (same as `--debug`)  |
+| `SECDB_NO_UPDATE_CHECK` | Set to any value to disable the background update check                 |
+| `NO_COLOR`              | Print raw Markdown instead of ANSI-styled `text` output                 |
+| `CI`                    | Automatically disables the background update check when set             |
 
 `--base-url` overrides the API endpoint (default: `https://secdb.nttzen.cloud/`).
 
@@ -143,7 +144,7 @@ ignore:
     reason: "Fixed upstream, upgrade planned"
     package:
       name: some-package
-      version: 1.0.0   # optional: without it, the rule matches every version of the package
+      version: 1.0.0    # optional: without it, the rule matches every version of the package
     expires: 2026-12-31 # optional: rule stops applying after this date (inclusive)
 ```
 
@@ -174,6 +175,140 @@ Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed a
 | `-v`, `--view` | `summary` *(default)*, one row per package, or `details`, one row per advisory (only applies to `--output=text`) |
 | `--fail-on` | Exit with status `2` if any package has a vulnerability at or above the given severity (`critical`, `high`, `medium`, `low`, `info`) |
 | `--ignore-file` | YAML file of accepted-risk rules that exclude matching findings from `--fail-on` (default `.secdbignore`) |
+| `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
+
+### Audit a dependency manifest
+
+Parse a project's dependency manifest, resolve its packages to PURLs, and audit them against ZEN SecDB. The format is detected from the file name.
+
+```bash
+secdb audit manifest --file go.mod
+secdb audit manifest --file package-lock.json
+secdb audit manifest --file requirements.txt --view details
+secdb audit manifest --file Gemfile.lock --fail-on=high
+secdb audit manifest --file pom.xml
+secdb audit manifest --file composer.lock
+```
+
+| Ecosystem | Files |
+|---|---|
+| Go | `go.mod` |
+| npm | `package-lock.json`, `yarn.lock` |
+| Python | `requirements*.txt` |
+| Ruby | `Gemfile.lock` |
+| Java (Maven) | `pom.xml` |
+| PHP (Composer) | `composer.lock` |
+
+For Python range specifiers that aren't an exact version (`>=2.28`), the leading version is audited; entries with no resolvable version (unpinned Python requirements, Maven versions supplied by a parent POM or an imported BOM, Composer platform requirements like `php`/`ext-*`) are skipped. The npm parser uses the lockfiles' resolved versions, so npm findings reflect what's actually installed. The Maven parser reads a single `pom.xml` and resolves `${...}` properties and versions declared in `<dependencyManagement>`, but does not follow parent POMs or transitive dependencies. Results are shaped and rendered exactly like `audit purl`: `--view`, `--fail-on`, `--ignore-file`, `--show-unfixed` and `--output=sarif`/`--output=csv` all behave the same way.
+
+| Flag | Description |
+|---|---|
+| `-f`, `--file` | *(required)* Path to the dependency manifest to audit |
+| `-v`, `--view` | `summary` *(default)* or `details` (only applies to `--output=text`) |
+| `--fail-on` | Exit with status `2` at or above the given severity |
+| `--ignore-file` | YAML file of accepted-risk rules (default `.secdbignore`) |
+| `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
+
+Support for more manifest formats can be added over time.
+
+### Editor integration (Language Server)
+
+`secdb lsp` starts a [Language Server](https://microsoft.github.io/language-server-protocol/) that audits dependency manifests **as you open and edit them**, reporting known vulnerabilities inline as editor diagnostics, each linking to its ZEN SecDB advisory. It reuses the same engine as [`audit manifest`](#audit-a-dependency-manifest), so it recognizes the same files (`go.mod`, `package-lock.json`, `yarn.lock`, `requirements*.txt`, `Gemfile.lock`, `pom.xml`, `composer.lock`) and honors the same `SECDB_API_KEY` and `--base-url` configuration.
+
+The server speaks JSON-RPC over stdin/stdout and is meant to be launched by an editor's LSP client, not run by hand (in a plain terminal it just waits for input). It debounces edits, so it audits shortly after you stop typing rather than on every keystroke. Set `SECDB_DEBUG=1` (or pass `--debug`) to log to stderr.
+
+<details>
+<summary><strong>Kate</strong> (Settings &gt; LSP Client &gt; User Server Settings)</summary>
+
+```json
+{
+  "servers": {
+    "secdb": {
+      "command": ["secdb", "lsp"],
+      "commandDebug": ["secdb", "lsp", "--debug"],
+      "rootIndicationFileNames": ["go.mod", "package-lock.json", "requirements.txt", "Gemfile.lock", "pom.xml", "composer.lock"],
+      "highlightingModeRegex": "^(Go|JSON|Python|Ruby|XML)$"
+    }
+  }
+}
+```
+</details>
+
+<details>
+<summary><strong>Sublime Text</strong> (Preferences &gt; Package Settings &gt; LSP &gt; Settings, requires the <code>LSP</code> package)</summary>
+
+```json
+{
+  "clients": {
+    "secdb": {
+      "enabled": true,
+      "command": ["secdb", "lsp"],
+      "selector": "source.go-mod | source.json | text.plain | text.xml | text.xml.dtd"
+    }
+  }
+}
+```
+</details>
+
+<details>
+<summary><strong>Neovim</strong> (0.10+, native LSP client, no plugin)</summary>
+
+Neovim has a built-in LSP client. Since `secdb` isn't a preconfigured server, start it from an autocommand keyed on the manifest file names (this sidesteps filetype detection, which is inconsistent for `yarn.lock`/`Gemfile.lock`). Add to your `init.lua`:
+
+```lua
+vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
+  pattern = {
+    "go.mod", "package-lock.json", "yarn.lock",
+    "requirements*.txt", "Gemfile.lock", "pom.xml",
+    "composer.lock",
+  },
+  callback = function(args)
+    vim.lsp.start({
+      name = "secdb",
+      cmd = { "secdb", "lsp" },
+      root_dir = vim.fs.root(args.buf, { ".git", "go.mod", "package.json", "pom.xml" }),
+    })
+  end,
+})
+```
+
+`secdb` must be on your `PATH`. `vim.lsp.start` reuses one server per project root, and Neovim shows the reported vulnerabilities as diagnostics automatically.
+</details>
+
+<details>
+<summary><strong>Zed</strong> (companion extension)</summary>
+
+Unlike Kate and Sublime, Zed can't point at an arbitrary LSP binary from its settings: a language server must be provided by an extension. Install the companion [**secdb Zed extension**](https://github.com/giterlizzi/secdb-zed) and, once enabled, Zed starts `secdb lsp` automatically on the recognized manifests (make sure `secdb` is on your `PATH`).
+</details>
+
+A few files aren't recognized as a distinct language by every editor, so the server may not start on them out of the box: Sublime scopes `go.mod` as `text.xml.dtd` (hence the entry in the selector above), and `requirements.txt`, `Gemfile.lock` and `yarn.lock` are plain text. The server itself detects the format from the file name regardless; it's only the editor's trigger that needs the scope/language hint.
+
+### Audit a CycloneDX SBOM
+
+Extract the PURLs from a CycloneDX BOM (JSON) and audit them against ZEN SecDB. This is a convenience front-end for [`audit purl --sbom`](#audit-purls-against-known-vulnerabilities): the two produce identical output.
+
+```bash
+secdb audit sbom --file bom.json
+
+# generate then audit
+syft packages dir:. -o cyclonedx-json > bom.json && secdb audit sbom --file bom.json
+cdxgen -o bom.json . && secdb audit sbom --file bom.json
+
+# CI (fail on high or critical)
+secdb audit sbom --file bom.json --fail-on=high
+
+# SARIF (e.g. for GitHub Code Scanning)
+secdb audit sbom --file bom.json --output=sarif > results.sarif
+```
+
+The PURLs are collected from the BOM's `components` (recursively). Results are shaped and rendered exactly like `audit purl`: `--view`, `--fail-on`, `--ignore-file`, `--show-unfixed` and `--output=sarif`/`--output=csv` all behave the same way.
+
+| Flag | Description |
+|---|---|
+| `-f`, `--file` | *(required)* Path to the CycloneDX SBOM (JSON) to audit |
+| `-v`, `--view` | `summary` *(default)* or `details` (only applies to `--output=text`) |
+| `--fail-on` | Exit with status `2` at or above the given severity |
+| `--ignore-file` | YAML file of accepted-risk rules (default `.secdbignore`) |
 | `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
 
 ### Audit a Linux system (EXPERIMENTAL)
