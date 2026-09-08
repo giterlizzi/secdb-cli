@@ -36,6 +36,10 @@ var rootCmd = &cobra.Command{
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		apiKey = os.Getenv("SECDB_API_KEY")
 
+		if os.Getenv("SECDB_DEBUG") != "" {
+			debug = true
+		}
+
 		switch outputFormat {
 		case "json", "yaml", "text", "template", "html", "sarif", "csv":
 		default:
