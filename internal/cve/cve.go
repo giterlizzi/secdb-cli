@@ -3,19 +3,12 @@
 package cve
 
 import (
-	"regexp"
 	"sort"
-	"strings"
 )
 
 type vendorCount struct {
 	Vendor string
 	Count  int
-}
-
-func IsValidCVE(cveID string) bool {
-	cveIDPattern := regexp.MustCompile(`^CVE-\d{4}-\d{4,}$`)
-	return cveIDPattern.MatchString(strings.ToUpper(cveID))
 }
 
 func SummarizeAffectedProducts(data map[string]interface{}) {

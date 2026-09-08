@@ -8,6 +8,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/giterlizzi/secdb-cli/internal/util"
+
 	"github.com/Masterminds/sprig/v3"
 )
 
@@ -38,6 +40,9 @@ func funcMap() template.FuncMap {
 	}
 	fm["severity"] = SeverityMarkdown
 	fm["ssvc_decision"] = SSVCDecisionMarkdown
+	fm["cve_url"] = util.CVEURL
+	fm["cwe_url"] = util.CWEURL
+	fm["advisory_url"] = util.AdvisoryURL
 	return fm
 }
 
@@ -59,6 +64,10 @@ func Render(w io.Writer, data interface{}, format Format, opts Options) error {
 func SeverityMarkdown(severity string) string {
 	var emoji string
 
+	if severity == "" {
+		return "-"
+	}
+
 	switch strings.ToLower(severity) {
 	case "critical", "important", "urgent", "severe", "high":
 		emoji = "🔴"
@@ -68,10 +77,6 @@ func SeverityMarkdown(severity string) string {
 		emoji = "🟡"
 	default:
 		emoji = "⚪"
-	}
-
-	if severity == "" {
-		return "-"
 	}
 
 	return fmt.Sprintf("%s **%s**", emoji, strings.ToUpper(severity))

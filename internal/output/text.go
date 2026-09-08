@@ -22,21 +22,21 @@ var templatesFS embed.FS
 // (audit, ssvc) keep their natural width. Pass a width for prose-heavy,
 // table-free output (e.g. cve) so paragraphs and lists wrap with a correct
 // hanging indent instead of being pre-wrapped in the template.
-func RenderText(w io.Writer, data interface{}, name string, wrap ...int) error {
+func RenderText(w io.Writer, data interface{}, templateName string, wrap ...int) error {
 	width := 0
 	if len(wrap) > 0 {
 		width = wrap[0]
 	}
 
-	tmpl, err := template.New(name).Funcs(funcMap()).ParseFS(templatesFS, "templates/*.tmpl")
+	tmpl, err := template.New(templateName).Funcs(funcMap()).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {
-		return fmt.Errorf("embedded template %q: %w", name, err)
+		return fmt.Errorf("embedded template %q: %w", templateName, err)
 	}
 
 	var buf bytes.Buffer
 
-	if err := tmpl.ExecuteTemplate(&buf, name+".tmpl", data); err != nil {
-		return fmt.Errorf("template %q execution: %w", name, err)
+	if err := tmpl.ExecuteTemplate(&buf, templateName+".tmpl", data); err != nil {
+		return fmt.Errorf("template %q execution: %w", templateName, err)
 	}
 
 	return writeMarkdown(w, buf.String(), width)

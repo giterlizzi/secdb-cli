@@ -5,15 +5,22 @@ package util
 import (
 	"bufio"
 	"fmt"
+	"golang.org/x/term"
 	"io"
+	"net/url"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
-	"golang.org/x/term"
-
 	"github.com/spf13/cobra"
 )
+
+var cveIDPattern = regexp.MustCompile(`^CVE-\d{4}-\d{4,}$`)
+
+func IsValidCVE(cveID string) bool {
+	return cveIDPattern.MatchString(strings.ToUpper(cveID))
+}
 
 func ExactArgs(n int, message string) cobra.PositionalArgs {
 	return func(cmd *cobra.Command, args []string) error {
@@ -29,7 +36,7 @@ func TimeAgo(t time.Time) string {
 	switch {
 	case d < time.Hour:
 		return fmt.Sprintf("%d minutes ago", int(d.Minutes()))
-	case int(d.Hours()/1) == 1:
+	case int(d.Hours()) == 1:
 		return "1 hour ago"
 	case d < 24*time.Hour:
 		return fmt.Sprintf("%d hours ago", int(d.Hours()))
@@ -99,4 +106,23 @@ func Statusf(format string, args ...interface{}) {
 	if term.IsTerminal(int(os.Stderr.Fd())) {
 		fmt.Fprintf(os.Stderr, format, args...)
 	}
+}
+func joinURL(baseURL string, path ...string) string {
+	u, _ := url.JoinPath(baseURL, path...)
+	return u
+}
+
+// CVE detail page
+func CVEURL(baseURL, id string) string {
+	return joinURL(baseURL, "cve", "detail", id)
+}
+
+// CWE detail page
+func CWEURL(baseURL, id string) string {
+	return joinURL(baseURL, "cwe", "detail", id)
+}
+
+// Advisory detail page
+func AdvisoryURL(baseURL, id string) string {
+	return joinURL(baseURL, "security-advisory", "detail", id)
 }

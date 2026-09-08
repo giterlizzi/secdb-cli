@@ -1,5 +1,6 @@
 {{- define "audit-details" -}}
 {{- $label := .Label -}}
+{{- $baseURL := .BaseURL -}}
 {{- range .Results}}
 
 ## {{.ID}}{{with .Title}} : {{.}}{{end}}
@@ -26,7 +27,7 @@
 {{- if .URL}}
 - **Source:** <{{.URL}}>
 {{- end}}
-- **ZEN SecDB:** <https://secdb.nttzen.cloud/security-advisory/detail/{{.ID}}>
+- **ZEN SecDB:** <{{ advisory_url $baseURL .ID }}>
 {{- if .Ignored}}
 - **Ignored:** ⚠️ {{.IgnoreReason}}
 {{- end}}

@@ -4,6 +4,6 @@
 - **{{.Label}}:** {{.Value}}
 {{- end}}
 
-{{template "audit-details" (dict "Results" .Results "Label" "PURLs")}}
+{{template "audit-details" (dict "Results" .Results "Label" "PURLs" "BaseURL" .BaseURL)}}
 
 {{template "audit-footer" .}}

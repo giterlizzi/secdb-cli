@@ -34,7 +34,7 @@ var cveCmd = &cobra.Command{
 
 		cveID := strings.ToUpper(args[0])
 
-		if !cve.IsValidCVE(cveID) {
+		if !util.IsValidCVE(cveID) {
 			return fmt.Errorf("invalid CVE identifier")
 		}
 

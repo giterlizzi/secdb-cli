@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/giterlizzi/secdb-cli/internal/cve"
 	"github.com/giterlizzi/secdb-cli/internal/output"
 	"github.com/giterlizzi/secdb-cli/internal/util"
 
@@ -68,7 +67,7 @@ var ssvcCalculateCmd = &cobra.Command{
 
 		for i, id := range cveIDs {
 			id = strings.ToUpper(id)
-			if !cve.IsValidCVE(id) {
+			if !util.IsValidCVE(id) {
 				return fmt.Errorf("invalid CVE identifier: %q (expected format: CVE-YYYY-NNNN)", cveIDs[i])
 			}
 			cveIDs[i] = id

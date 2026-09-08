@@ -72,18 +72,18 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 	}
 
 	return renderAudit(auditRenderConfig{
-		data:       data,
-		opts:       opts,
-		ignoreFile: ignoreFile,
-		baseURL:    client.BaseURL(),
+		data:        data,
+		opts:        opts,
+		ignoreFile:  ignoreFile,
+		baseURL:     client.BaseURL(),
+		template:    "audit-linux",
+		sarifSource: fmt.Sprintf("%s/%s", info.OS, info.Version),
 		meta: []report.MetaItem{
 			{Label: "Target", Value: target.Describe()},
 			{Label: "OS", Value: fmt.Sprintf("%s %s", info.OS, info.Version)},
 			{Label: "Arch", Value: info.Arch},
 			{Label: "Packages scanned", Value: strconv.Itoa(len(info.Packages))},
 		},
-		template:    "audit-linux",
-		sarifSource: fmt.Sprintf("%s/%s", info.OS, info.Version),
 	})
 }
 
@@ -102,22 +102,24 @@ func renderAudit(cfg auditRenderConfig) error {
 
 	switch outputFormat {
 	case "text":
+		r := report.Report{}
+
 		switch cfg.opts.view {
 		case "summary":
-			r := report.Report{Results: audit.SummarizePURLAudit(cfg.data, cfg.opts.showUnfixed)}
-			r.PrependMeta(meta...)
-			if err := output.RenderText(os.Stdout, r, cfg.template+"-summary"); err != nil {
-				return fmt.Errorf("failed to render summary: %w", err)
-			}
+			r.Results = audit.SummarizePURLAudit(cfg.data, cfg.opts.showUnfixed)
 		case "details":
-			r := audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
-			r.BaseURL = cfg.baseURL
-			r.PrependMeta(meta...)
-			if err := output.RenderText(os.Stdout, r, cfg.template+"-details"); err != nil {
-				return fmt.Errorf("failed to render details: %w", err)
-			}
+			r = audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
 		default:
 			return fmt.Errorf("invalid --view option: %q (valid options: summary, details)", cfg.opts.view)
+		}
+
+		r.BaseURL = cfg.baseURL
+		r.PrependMeta(meta...)
+
+		templateName := fmt.Sprintf("%s-%s", cfg.template, cfg.opts.view)
+
+		if err := output.RenderText(os.Stdout, r, templateName); err != nil {
+			return fmt.Errorf("failed to render details: %w", err)
 		}
 	case "sarif":
 		r := audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)

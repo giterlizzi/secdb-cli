@@ -14,7 +14,7 @@
 - EPSS:      {{printf "%.2f" (mulf 100 .score)}}% ({{printf "%.0f" (mulf 100 .percentile)}}° pct)
 {{- end}}
 {{- if .secdb_url}}
-- Link:      {{.secdb_url}}/cve/detail/{{.id}}
+- Link:      {{ cve_url .secdb_url .id }}
 {{- end}}
 
 ## Description
