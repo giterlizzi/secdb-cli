@@ -13,7 +13,7 @@ import (
 
 func TestWriteSARIF_Empty(t *testing.T) {
 	var buf bytes.Buffer
-	if err := WriteSARIF(&buf, []audit.AdvisoryResult{}, "bom.json"); err != nil {
+	if err := WriteSARIF(&buf, []audit.AdvisoryResult{}, "bom.json", nil); err != nil {
 		t.Fatalf("WriteSARIF: %v", err)
 	}
 
@@ -54,12 +54,12 @@ func TestWriteSARIF_OneResultPerPackage(t *testing.T) {
 			Title:     "affects multiple packages",
 			Severity:  "medium",
 			CVSSScore: 5.5,
-			Packages:  []string{"pkg:npm/a@1.0.0", "pkg:npm/b@1.0.0", "pkg:npm/a@1.0.0"},
+			PURLs:     []string{"pkg:npm/a@1.0.0", "pkg:npm/b@1.0.0", "pkg:npm/a@1.0.0"},
 		},
 	}
 
 	var buf bytes.Buffer
-	if err := WriteSARIF(&buf, advisories, "bom.json"); err != nil {
+	if err := WriteSARIF(&buf, advisories, "bom.json", nil); err != nil {
 		t.Fatalf("WriteSARIF: %v", err)
 	}
 
@@ -87,6 +87,88 @@ func TestWriteSARIF_OneResultPerPackage(t *testing.T) {
 
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("result ruleIds = %v, want %v", got, want)
+	}
+}
+
+func TestWriteSARIF_PerFileAttribution(t *testing.T) {
+	// One advisory affecting three packages that a --directory scan discovered
+	// in different manifests. The sources map (keyed by canonical PURL) attributes
+	// each finding to its own file; a PURL missing from the map falls back to the
+	// run-level sourceFile, and a mapped file with no line carries no region.
+	advisories := []audit.AdvisoryResult{
+		{
+			ID:       "GHSA-multi-file",
+			Title:    "affects packages across files",
+			Severity: "high",
+			PURLs: []string{
+				"pkg:golang/example.com/a@1.0.0",
+				"pkg:maven/org.example/b@2.0.0",
+				"pkg:npm/c@3.0.0",
+			},
+		},
+	}
+
+	sources := map[string]SourceLocation{
+		"pkg:golang/example.com/a@1.0.0": {File: "go.mod", Line: 12},
+		"pkg:maven/org.example/b@2.0.0":  {File: "services/pom.xml"}, // no line (position-less manifest)
+		// "pkg:npm/c@3.0.0" intentionally absent -> falls back to sourceFile
+	}
+
+	var buf bytes.Buffer
+	if err := WriteSARIF(&buf, advisories, "fallback.txt", sources); err != nil {
+		t.Fatalf("WriteSARIF: %v", err)
+	}
+
+	var out struct {
+		Runs []struct {
+			Results []struct {
+				Locations []struct {
+					PhysicalLocation struct {
+						ArtifactLocation struct {
+							URI string `json:"uri"`
+						} `json:"artifactLocation"`
+						Region *struct {
+							StartLine int `json:"startLine"`
+						} `json:"region"`
+					} `json:"physicalLocation"`
+				} `json:"locations"`
+			} `json:"results"`
+		} `json:"runs"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
+		t.Fatalf("invalid SARIF JSON: %v", err)
+	}
+
+	if len(out.Runs) != 1 || len(out.Runs[0].Results) != 3 {
+		t.Fatalf("expected 1 run with 3 results, got %+v", out)
+	}
+	results := out.Runs[0].Results
+
+	// Result 0: mapped file with a line -> region present.
+	loc0 := results[0].Locations[0].PhysicalLocation
+	if loc0.ArtifactLocation.URI != "go.mod" {
+		t.Errorf("result 0 uri = %q, want %q", loc0.ArtifactLocation.URI, "go.mod")
+	}
+	if loc0.Region == nil || loc0.Region.StartLine != 12 {
+		t.Errorf("result 0 region = %+v, want startLine 12", loc0.Region)
+	}
+
+	// Result 1: mapped file without a line -> file-level location, no region.
+	loc1 := results[1].Locations[0].PhysicalLocation
+	if loc1.ArtifactLocation.URI != "services/pom.xml" {
+		t.Errorf("result 1 uri = %q, want %q", loc1.ArtifactLocation.URI, "services/pom.xml")
+	}
+	if loc1.Region != nil {
+		t.Errorf("result 1 must have no region (line 0), got %+v", loc1.Region)
+	}
+
+	// Result 2: PURL absent from sources -> falls back to the run-level sourceFile.
+	loc2 := results[2].Locations[0].PhysicalLocation
+	if loc2.ArtifactLocation.URI != "fallback.txt" {
+		t.Errorf("result 2 uri = %q, want fallback %q", loc2.ArtifactLocation.URI, "fallback.txt")
+	}
+	if loc2.Region != nil {
+		t.Errorf("result 2 must have no region, got %+v", loc2.Region)
 	}
 }
 
@@ -182,20 +264,20 @@ func TestWriteSARIF_Suppressions(t *testing.T) {
 			ID:       "GHSA-active",
 			Title:    "active finding",
 			Severity: "high",
-			Packages: []string{"pkg:npm/foo@1.0.0"},
+			PURLs:    []string{"pkg:npm/foo@1.0.0"},
 		},
 		{
 			ID:           "GHSA-ignored",
 			Title:        "ignored finding",
 			Severity:     "critical",
-			Packages:     []string{"pkg:npm/bar@1.0.0"},
+			PURLs:        []string{"pkg:npm/bar@1.0.0"},
 			Ignored:      true,
 			IgnoreReason: "accepted risk, ticket JIRA-123",
 		},
 	}
 
 	var buf bytes.Buffer
-	if err := WriteSARIF(&buf, advisories, "bom.json"); err != nil {
+	if err := WriteSARIF(&buf, advisories, "bom.json", nil); err != nil {
 		t.Fatalf("WriteSARIF: %v", err)
 	}
 
@@ -256,13 +338,13 @@ func TestWriteSARIF_SuppressionDefaultJustification(t *testing.T) {
 			ID:       "GHSA-ignored-noreason",
 			Title:    "ignored, no reason given",
 			Severity: "low",
-			Packages: []string{"pkg:npm/baz@1.0.0"},
+			PURLs:    []string{"pkg:npm/baz@1.0.0"},
 			Ignored:  true,
 		},
 	}
 
 	var buf bytes.Buffer
-	if err := WriteSARIF(&buf, advisories, ""); err != nil {
+	if err := WriteSARIF(&buf, advisories, "", nil); err != nil {
 		t.Fatalf("WriteSARIF: %v", err)
 	}
 
