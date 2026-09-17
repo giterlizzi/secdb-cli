@@ -179,7 +179,7 @@ Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed a
 
 ### Audit a dependency manifest
 
-Parse a project's dependency manifest, resolve its packages to PURLs, and audit them against ZEN SecDB. The format is detected from the file name.
+Parse a project's dependency manifest, resolve its packages to PURLs, and audit them against ZEN SecDB. The format is detected from the file name. Pass a single manifest with `--file`, or scan a directory with `--directory` to recursively discover and audit every supported manifest under it.
 
 ```bash
 secdb audit manifest --file go.mod
@@ -188,6 +188,10 @@ secdb audit manifest --file requirements.txt --view details
 secdb audit manifest --file Gemfile.lock --fail-on=high
 secdb audit manifest --file pom.xml
 secdb audit manifest --file composer.lock
+
+# Discover and audit every manifest under a directory (recursively)
+secdb audit manifest --directory .
+secdb audit manifest --directory ./services --max-depth 3 --fail-on=high
 ```
 
 | Ecosystem | Files |
@@ -201,9 +205,13 @@ secdb audit manifest --file composer.lock
 
 For Python range specifiers that aren't an exact version (`>=2.28`), the leading version is audited; entries with no resolvable version (unpinned Python requirements, Maven versions supplied by a parent POM or an imported BOM, Composer platform requirements like `php`/`ext-*`) are skipped. The npm parser uses the lockfiles' resolved versions, so npm findings reflect what's actually installed. The Maven parser reads a single `pom.xml` and resolves `${...}` properties and versions declared in `<dependencyManagement>`, but does not follow parent POMs or transitive dependencies. Results are shaped and rendered exactly like `audit purl`: `--view`, `--fail-on`, `--ignore-file`, `--show-unfixed` and `--output=sarif`/`--output=csv` all behave the same way.
 
+With `--directory`, discovery prunes noise directories (`.git`, `node_modules`, `vendor`, `target`, `dist`, `build`, `testdata`, ...) and does not follow symlinks; `--max-depth` caps how deep the walk descends. A manifest that fails to parse is skipped with a warning instead of aborting the scan, and all discovered dependencies are audited together in a single report. (With `--output=sarif`, findings from a `--directory` scan are not yet attributed to their individual source files.)
+
 | Flag | Description |
 |---|---|
-| `-f`, `--file` | *(required)* Path to the dependency manifest to audit |
+| `-f`, `--file` | Path to a single dependency manifest to audit (mutually exclusive with `--directory`) |
+| `-d`, `--directory` | Directory to recursively discover and audit manifests in (mutually exclusive with `--file`) |
+| `--max-depth` | Max directory depth to descend with `--directory` (`0` = unlimited) |
 | `-v`, `--view` | `summary` *(default)* or `details` (only applies to `--output=text`) |
 | `--fail-on` | Exit with status `2` at or above the given severity |
 | `--ignore-file` | YAML file of accepted-risk rules (default `.secdbignore`) |
@@ -217,6 +225,8 @@ Support for more manifest formats can be added over time.
 
 The server speaks JSON-RPC over stdin/stdout and is meant to be launched by an editor's LSP client, not run by hand (in a plain terminal it just waits for input). It debounces edits, so it audits shortly after you stop typing rather than on every keystroke. Set `SECDB_DEBUG=1` (or pass `--debug`) to log to stderr.
 
+On startup the server also **discovers and audits every supported manifest in the workspace**, so findings show up without opening each file (noise directories like `node_modules`, `vendor`, `target`, `dist`, `build` and `testdata` are skipped, and symlinks aren't followed). Discovery skips files you already have open (they're kept fresh by the edit path) and audits the rest sequentially. Pass `--no-discovery` to audit only files as they are opened.
+
 <details>
 <summary><strong>Kate</strong> (Settings &gt; LSP Client &gt; User Server Settings)</summary>
 
@@ -226,7 +236,7 @@ The server speaks JSON-RPC over stdin/stdout and is meant to be launched by an e
     "secdb": {
       "command": ["secdb", "lsp"],
       "commandDebug": ["secdb", "lsp", "--debug"],
-      "rootIndicationFileNames": ["go.mod", "package-lock.json", "requirements.txt", "Gemfile.lock", "pom.xml", "composer.lock"],
+      "rootIndicationFileNames": ["go.mod", "package-lock.json", "yarn.lock", "requirements.txt", "Gemfile.lock", "pom.xml", "composer.lock"],
       "highlightingModeRegex": "^(Go|JSON|Python|Ruby|XML)$"
     }
   }
@@ -278,7 +288,7 @@ vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
 <details>
 <summary><strong>Zed</strong> (companion extension)</summary>
 
-Unlike Kate and Sublime, Zed can't point at an arbitrary LSP binary from its settings: a language server must be provided by an extension. Install the companion [**secdb Zed extension**](https://github.com/giterlizzi/secdb-zed) and, once enabled, Zed starts `secdb lsp` automatically on the recognized manifests (make sure `secdb` is on your `PATH`).
+Unlike Kate and Sublime, Zed can't point at an arbitrary LSP binary from its settings: a language server must be provided by an extension. Install the companion [**secdb Zed extension**](https://github.com/giterlizzi/secdb-zed) and, once enabled, Zed starts `secdb lsp` automatically on the recognized manifests (make sure `secdb` is on your `PATH`). Zed launches the server lazily, on opening the first recognized file; workspace discovery then audits the rest of the project.
 </details>
 
 A few files aren't recognized as a distinct language by every editor, so the server may not start on them out of the box: Sublime scopes `go.mod` as `text.xml.dtd` (hence the entry in the selector above), and `requirements.txt`, `Gemfile.lock` and `yarn.lock` are plain text. The server itself detects the format from the file name regardless; it's only the editor's trigger that needs the scope/language hint.
