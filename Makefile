@@ -3,6 +3,7 @@ BIN_DIR     := bin
 DIST_DIR    := dist
 CGO_ENABLED := 0
 PREFIX      ?= $(HOME)/.local
+SRCS        := $(shell find -name '*.go')
 
 VERSION     := $(shell git describe --tags --always --dirty 2>/dev/null || echo v0.0.0)
 COMMIT_HASH := $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
@@ -88,6 +89,9 @@ lint: install-golangci-lint ## Run golangci-lint over the whole module
 
 clean: ## Remove build artifacts (bin/ and dist/)
 	rm -rf $(BIN_DIR) $(DIST_DIR)
+
+fmt: ## format Go code
+	gofmt -s -w $(SRCS)
 
 .PHONY: help
 help: ## Show help for each of the Makefile recipes

@@ -5,13 +5,14 @@ package util
 import (
 	"bufio"
 	"fmt"
-	"golang.org/x/term"
 	"io"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
 	"time"
+
+	"golang.org/x/term"
 
 	"github.com/spf13/cobra"
 )
