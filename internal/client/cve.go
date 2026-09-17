@@ -14,13 +14,13 @@ func (c *Client) GetCVE(id string, expand ...string) (map[string]interface{}, er
 		path += "?expand=" + strings.Join(expand, ",")
 	}
 
-	body, err := c.get(path)
+	res, err := c.get(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CVE: %w", err)
 	}
 
 	var data map[string]interface{}
-	if err := json.Unmarshal(body, &data); err != nil {
+	if err := json.Unmarshal(res.Body, &data); err != nil {
 		return nil, fmt.Errorf("parse JSON: %w", err)
 	}
 

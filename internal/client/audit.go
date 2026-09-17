@@ -14,13 +14,13 @@ func (c *Client) PURLAudit(purls []string) ([]AuditItem, error) {
 		return nil, fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	body, err := c.post("/api/v1/audit/purl", bytes.NewBuffer(payload))
+	res, err := c.post("/api/v1/audit/purl", bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to audit PURLs: %w", err)
 	}
 
 	var data []AuditItem
-	if err := json.Unmarshal(body, &data); err != nil {
+	if err := json.Unmarshal(res.Body, &data); err != nil {
 		return nil, fmt.Errorf("parse JSON: %w", err)
 	}
 
@@ -38,13 +38,13 @@ func (c *Client) LinuxAudit(osName, version, arch string, packages []string) ([]
 		return nil, fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	body, err := c.post("/api/v1/audit/linux", bytes.NewBuffer(payload))
+	res, err := c.post("/api/v1/audit/linux", bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to audit Linux packages: %w", err)
 	}
 
 	var data []AuditItem
-	if err := json.Unmarshal(body, &data); err != nil {
+	if err := json.Unmarshal(res.Body, &data); err != nil {
 		return nil, fmt.Errorf("parse JSON: %w", err)
 	}
 

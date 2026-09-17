@@ -18,13 +18,13 @@ func (c *Client) SSVCBulk(cveIDs []string, missionPrevalence string, publicWellB
 		return nil, fmt.Errorf("failed to marshal JSON: %w", err)
 	}
 
-	body, err := c.post("/api/v1/ssvc/bulk", bytes.NewBuffer(payload))
+	res, err := c.post("/api/v1/ssvc/bulk", bytes.NewBuffer(payload))
 	if err != nil {
 		return nil, fmt.Errorf("failed to execute SSVC bulk request: %w", err)
 	}
 
 	var data []SSVCBulkResponse
-	if err := json.Unmarshal(body, &data); err != nil {
+	if err := json.Unmarshal(res.Body, &data); err != nil {
 		return nil, fmt.Errorf("parse JSON: %w", err)
 	}
 

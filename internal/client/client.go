@@ -11,6 +11,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -27,10 +28,15 @@ type Client struct {
 	httpClient *http.Client
 }
 
+type ClientResponse struct {
+	Body   []byte
+	Header *http.Header
+}
+
 func NewClient() *Client {
 	return &Client{
 		baseURL:    defaultBaseURL,
-		httpClient: &http.Client{Timeout: 60 * time.Second},
+		httpClient: &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
@@ -43,7 +49,11 @@ func (c *Client) WithApiKey(apiKey string) *Client {
 
 func (c *Client) WithBaseURL(baseURL string) *Client {
 	if baseURL != "" {
-		c.baseURL = strings.TrimRight(baseURL, "/")
+		if u, err := url.Parse(baseURL); err == nil && u.Scheme != "" && u.Host != "" {
+			c.baseURL = strings.TrimRight(baseURL, "/")
+		} else {
+			slog.Warn("invalid --base-url, falling back to default", "base_url", baseURL, "default", c.baseURL)
+		}
 	}
 	return c
 }
@@ -55,7 +65,7 @@ func (c *Client) BaseURL() string {
 	return c.baseURL
 }
 
-func (c *Client) request(req *http.Request) ([]byte, error) {
+func (c *Client) request(req *http.Request) (ClientResponse, error) {
 
 	req.Header = http.Header{
 		"Content-Type": {"application/json"},
@@ -68,60 +78,63 @@ func (c *Client) request(req *http.Request) ([]byte, error) {
 
 	slog.Debug("request", "method", req.Method, "url", req.URL)
 
-	resp, err := c.httpClient.Do(req)
+	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
+		return ClientResponse{}, fmt.Errorf("request failed: %w", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
+	defer func() { _ = res.Body.Close() }()
 
-	slog.Debug("response", "status", resp.Status)
-	logRateLimit(resp)
+	slog.Debug("response", "status", res.Status)
+	logRateLimit(&res.Header)
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read body: %w", err)
+		return ClientResponse{}, fmt.Errorf("read body: %w", err)
 	}
 
-	switch resp.StatusCode {
+	switch res.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return nil, fmt.Errorf("not found")
+		return ClientResponse{}, fmt.Errorf("not found")
 	case http.StatusUnauthorized:
-		return nil, fmt.Errorf("unauthorized")
+		return ClientResponse{}, fmt.Errorf("unauthorized")
 	case http.StatusTooManyRequests:
-		return nil, fmt.Errorf("rate-limit error")
+		return ClientResponse{}, fmt.Errorf("rate-limit error")
 	default:
-		return nil, fmt.Errorf("API error (status %d): %s", resp.StatusCode, string(body))
+		return ClientResponse{}, fmt.Errorf("API error (status %d): %s", res.StatusCode, string(body))
 	}
 
-	return body, nil
+	return ClientResponse{
+		Body:   body,
+		Header: &res.Header,
+	}, nil
 }
 
-func (c *Client) get(path string) ([]byte, error) {
+func (c *Client) get(path string) (ClientResponse, error) {
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return ClientResponse{}, fmt.Errorf("build request: %w", err)
 	}
 
 	return c.request(req)
 }
 
-func (c *Client) post(path string, body io.Reader) ([]byte, error) {
+func (c *Client) post(path string, body io.Reader) (ClientResponse, error) {
 	req, err := http.NewRequest(http.MethodPost, c.baseURL+path, body)
 	if err != nil {
-		return nil, fmt.Errorf("build request: %w", err)
+		return ClientResponse{}, fmt.Errorf("build request: %w", err)
 	}
 
 	return c.request(req)
 }
 
 // logRateLimit, log the total remaining and used requests from RateLimit-* headers
-func logRateLimit(resp *http.Response) {
+func logRateLimit(h *http.Header) {
 
-	remaining := resp.Header.Get("RateLimit-Remaining")
-	limit := resp.Header.Get("RateLimit-Limit")
-	used := resp.Header.Get("RateLimit-Used")
-	reset := resp.Header.Get("RateLimit-Reset")
+	remaining := h.Get("RateLimit-Remaining")
+	limit := h.Get("RateLimit-Limit")
+	used := h.Get("RateLimit-Used")
+	reset := h.Get("RateLimit-Reset")
 
 	if limit == "" && remaining == "" {
 		return
