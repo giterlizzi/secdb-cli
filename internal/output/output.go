@@ -27,6 +27,12 @@ type Options struct {
 	TemplateExpression string
 }
 
+type SourceLocation struct {
+	PURL string
+	File string
+	Line int
+}
+
 // unsafeTemplateFuncs are Sprig functions capable of reading environment
 // variables or making network calls. They are stripped from funcMap so that
 // user-supplied templates (--template / --template-file) cannot exfiltrate

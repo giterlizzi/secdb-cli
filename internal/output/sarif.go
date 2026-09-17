@@ -16,7 +16,7 @@ import (
 	"github.com/owenrumney/go-sarif/v3/pkg/report/v210/sarif"
 )
 
-func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile string) error {
+func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile string, sources map[string]SourceLocation) error {
 	sarifReport := report.NewV210Report()
 
 	run := sarif.NewRunWithInformationURI("secdb-cli", "https://github.com/giterlizzi/secdb-cli")
@@ -24,12 +24,18 @@ func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile strin
 	run.AutomationDetails = sarif.NewRunAutomationDetails().WithID("secdb-cli/audit-purl")
 
 	for _, adv := range advisories {
-		for _, pkg := range adv.Packages {
-			ruleId := fmt.Sprintf("%s-%s", adv.ID, pkg)
-			resultTitle := fmt.Sprintf("A %s vulnerability in %s was found: %s", adv.Severity, pkg, adv.Title)
+		for _, purl := range adv.PURLs {
+			file, line := sourceFile, 0
+
+			if loc, ok := sources[purl]; ok {
+				file, line = loc.File, loc.Line
+			}
+
+			ruleId := fmt.Sprintf("%s-%s", adv.ID, purl)
+			resultTitle := fmt.Sprintf("A %s vulnerability in %s was found: %s", adv.Severity, purl, adv.Title)
 
 			fullDescription := buildFullDescription(adv)
-			shortDescription := fmt.Sprintf("[%s] %s vulnerability for %s package", adv.ID, adv.Severity, pkg)
+			shortDescription := fmt.Sprintf("[%s] %s vulnerability for %s package", adv.ID, adv.Severity, purl)
 
 			rule := run.AddRule(ruleId)
 			rule.WithName(ruleId)
@@ -37,26 +43,30 @@ func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile strin
 			rule.WithHelpURI(adv.URL)
 
 			if fullDescription != "" {
-				rule.WithFullDescription(sarif.NewMultiformatMessageString().WithText(fullDescription))
+				rule.WithFullDescription(sarif.NewMultiformatMessageString().
+					WithText(fullDescription))
 			}
 
 			rule.Properties = sarif.NewPropertyBag().
 				Add("security-severity", severityToScore(adv)).
-				Add("purls", []string{pkg}).
+				Add("purls", []string{purl}).
 				Add("tags", buildTags(adv))
+
+			phys := sarif.NewPhysicalLocation().
+				WithArtifactLocation(sarif.NewSimpleArtifactLocation(file))
+			if line > 0 {
+				phys.WithRegion(sarif.NewRegion().WithStartLine(line))
+			}
 
 			result := run.CreateResultForRule(ruleId)
 			result.WithLevel(severityToSARIFLevel(adv)).
 				WithMessage(sarif.NewTextMessage(resultTitle)).
 				WithLocations([]*sarif.Location{
-					sarif.NewLocationWithPhysicalLocation(
-						sarif.NewPhysicalLocation().
-							WithArtifactLocation(sarif.NewSimpleArtifactLocation(sourceFile)),
-					),
+					sarif.NewLocationWithPhysicalLocation(phys),
 				})
 
 			result.WithPartialFingerprints(map[string]string{
-				"primaryLocationLineHash": buildFingerprint(sourceFile, adv.ID, pkg),
+				"primaryLocationLineHash": buildFingerprint(file, adv.ID, purl),
 			})
 
 			if adv.Ignored {

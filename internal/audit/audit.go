@@ -34,6 +34,7 @@ type AdvisoryResult struct {
 	Description  string
 	Severity     string
 	Packages     []string
+	PURLs        []string
 	CVEs         []string
 	CWEs         []string
 	CVSSScore    float64
@@ -189,7 +190,10 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 
 				order = append(order, adv.ID)
 			}
+
 			byID[adv.ID].Packages = append(byID[adv.ID].Packages, r.Package)
+			byID[adv.ID].PURLs = append(byID[adv.ID].PURLs, r.PURL)
+
 			if unfixed {
 				byID[adv.ID].Unfixed = true
 			}

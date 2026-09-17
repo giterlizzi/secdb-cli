@@ -110,12 +110,12 @@ var purlAuditCmd = &cobra.Command{
 		}
 
 		return renderAudit(auditRenderConfig{
-			data:        data,
-			opts:        &purlOpts,
-			ignoreFile:  ignoreFile,
-			baseURL:     client.BaseURL(),
-			template:    "audit-purl",
-			sarifSource: sbomFile,
+			data:       data,
+			opts:       &purlOpts,
+			ignoreFile: ignoreFile,
+			baseURL:    client.BaseURL(),
+			template:   "audit-purl",
+			source:     sbomFile,
 			meta: []report.MetaItem{
 				{Label: "Source", Value: source},
 				{Label: "PURLs scanned", Value: strconv.Itoa(len(purls))},

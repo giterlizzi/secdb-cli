@@ -73,12 +73,12 @@ var sbomAuditCmd = &cobra.Command{
 		}
 
 		return renderAudit(auditRenderConfig{
-			data:        data,
-			opts:        &sbomOpts,
-			ignoreFile:  ignoreFile,
-			baseURL:     client.BaseURL(),
-			template:    "audit-purl",
-			sarifSource: sbomAuditFile,
+			data:       data,
+			opts:       &sbomOpts,
+			ignoreFile: ignoreFile,
+			baseURL:    client.BaseURL(),
+			template:   "audit-purl",
+			source:     sbomAuditFile,
 			meta: []report.MetaItem{
 				{Label: "Source", Value: "SBOM (" + sbomAuditFile + ")"},
 				{Label: "PURLs scanned", Value: strconv.Itoa(len(purls))},

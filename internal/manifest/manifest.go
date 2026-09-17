@@ -9,6 +9,7 @@ package manifest
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -53,6 +54,27 @@ type Parser interface {
 	Patterns() []string
 	// Parse extracts the dependencies from the manifest content.
 	Parse(filename string, content []byte) ([]Dependency, error)
+}
+
+// DefaultSkipDirs are directory base names pruned from a workspace walk.
+var DefaultSkipDirs = map[string]bool{
+	// VCS
+	".git": true, ".hg": true, ".svn": true,
+
+	// NPM
+	"node_modules": true, ".next": true, ".angular": true, ".svelte-kit": true,
+
+	// Python
+	"site-packages": true, ".venv": true, "venv": true, "__pycache__": true, "env": true,
+
+	// Common
+	"vendor": true, "target": true, "dist": true, "build": true, "out": true, "tmp": true,
+
+	// IDE
+	".idea": true, ".vscode": true,
+
+	// Test
+	"testdata": true, "coverage": true,
 }
 
 var parsers = []Parser{
@@ -121,6 +143,40 @@ func SupportedPatterns() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// Discover walks root recursively and returns the paths of every supported
+// manifest file. Directories named in skip (defaults to DefaultSkipDirs when
+// nil) are pruned; maxDepth limits how many directory levels below root to
+// descend (0 = unlimited). Symlinks are not followed (WalkDir default).
+func Discover(root string, skip map[string]bool, maxDepth int) ([]string, error) {
+	if skip == nil {
+		skip = DefaultSkipDirs
+	}
+	var out []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if path != root && skip[d.Name()] {
+				return filepath.SkipDir
+			}
+			if maxDepth > 0 {
+				rel, _ := filepath.Rel(root, path)
+				if rel != "." && strings.Count(rel, string(os.PathSeparator))+1 > maxDepth {
+					return filepath.SkipDir
+				}
+			}
+			return nil
+		}
+		if ParserFor(path) != nil {
+			out = append(out, path)
+		}
+		return nil
+	})
+	sort.Strings(out)
+	return out, err
 }
 
 func lineRange(line int) Range {

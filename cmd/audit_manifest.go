@@ -6,23 +6,26 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
-	"strings"
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
 	"github.com/giterlizzi/secdb-cli/internal/manifest"
+	"github.com/giterlizzi/secdb-cli/internal/output"
 	"github.com/giterlizzi/secdb-cli/internal/report"
+	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
 )
 
 var (
+	maxDepth     int
 	manifestFile string
+	manifestDir  string
 	manifestOpts auditOptions
 )
 
 var manifestAuditCmd = &cobra.Command{
-	Use: "manifest --file <FILE>",
+	Use: "manifest (--file <FILE> | --directory <DIR>)",
 	Example: heredoc.Doc(`
 		Go modules:
 		  	secdb audit manifest --file go.mod
@@ -39,6 +42,10 @@ var manifestAuditCmd = &cobra.Command{
 		  	secdb audit manifest --file pom.xml
 		  	secdb audit manifest --file composer.lock
 
+		Discover and audit every manifest under a directory (recursively):
+		  	secdb audit manifest --directory .
+		  	secdb audit manifest --directory ./services --max-depth 3
+
 		CI (fail on high or critical):
 		  	secdb audit manifest --file go.mod --fail-on=high
 	`),
@@ -46,6 +53,15 @@ var manifestAuditCmd = &cobra.Command{
 	Long: heredoc.Doc(`
 		Parse a dependency manifest, resolve its packages to PURLs, and audit
 		them against the ZEN SecDB for known vulnerabilities.
+
+		Pass a single manifest with --file, or scan a directory with --directory
+		to recursively discover and audit every supported manifest under it (the
+		two flags are mutually exclusive). Discovery prunes noise directories
+		(.git, node_modules, vendor, target, dist, build, testdata, ...) and does
+		not follow symlinks; --max-depth limits how deep the walk descends
+		(0 = unlimited). A manifest that fails to parse is skipped with a warning
+		rather than aborting the whole scan; all discovered dependencies are
+		audited together in a single report.
 
 		The manifest format is detected from the file name. Supported files:
 		  - go.mod                                      (Go modules)
@@ -61,26 +77,56 @@ var manifestAuditCmd = &cobra.Command{
 	`),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if manifestFile == "" {
-			return fmt.Errorf("--file is required: pass the path to a dependency manifest (supported: %s)",
-				strings.Join(manifest.SupportedPatterns(), ", "))
+		var (
+			files []string
+			err   error
+		)
+
+		switch {
+		case manifestDir != "" && manifestFile != "":
+			return fmt.Errorf("--file and --directory are mutually exclusive")
+		case manifestDir != "":
+			files, err = manifest.Discover(manifestDir, nil, maxDepth)
+			if err != nil {
+				return err
+			}
+			if len(files) == 0 {
+				return fmt.Errorf("no supported manifests found under %s", manifestDir)
+			}
+		case manifestFile != "":
+			files = []string{manifestFile}
+		default:
+			return fmt.Errorf("--file or --directory is required")
 		}
 
-		deps, err := manifest.ParseFile(manifestFile)
-		if err != nil {
-			return err
-		}
+		var purls []string
+		sources := map[string]output.SourceLocation{}
 
-		purls := make([]string, 0, len(deps))
-		for _, d := range deps {
-			if d.PURL != "" {
-				slog.Debug("found dependency", "file", manifestFile, "dependency", d)
-				purls = append(purls, d.PURL)
+		for _, f := range files {
+			deps, err := manifest.ParseFile(f)
+			if err != nil {
+				slog.Warn("skipping manifest", "file", f, "error", err)
+				continue
+			}
+			for _, d := range deps {
+				if d.PURL != "" {
+					slog.Debug("found dependency", "file", f, "dependency", d)
+					purls = append(purls, d.PURL)
+					if _, ok := sources[d.PURL]; !ok {
+						sources[d.PURL] = output.SourceLocation{File: f, Line: d.Range.Start.Line}
+					}
+				}
 			}
 		}
-		purls = audit.ValidatePURLs(purls)
+
+		source := manifestFile
+		if manifestDir != "" {
+			source = manifestDir
+		}
+
+		purls = util.Deduplicate(audit.ValidatePURLs(purls))
 		if len(purls) == 0 {
-			return fmt.Errorf("no auditable dependencies found in %s", manifestFile)
+			return fmt.Errorf("no auditable dependencies found in %s", source)
 		}
 
 		ignoreFile, err := audit.LoadIgnoreFile(manifestOpts.ignoreFile)
@@ -95,14 +141,14 @@ var manifestAuditCmd = &cobra.Command{
 		}
 
 		return renderAudit(auditRenderConfig{
-			data:        data,
-			opts:        &manifestOpts,
-			ignoreFile:  ignoreFile,
-			baseURL:     client.BaseURL(),
-			template:    "audit-purl",
-			sarifSource: manifestFile,
+			data:       data,
+			opts:       &manifestOpts,
+			ignoreFile: ignoreFile,
+			baseURL:    client.BaseURL(),
+			template:   "audit-purl",
+			sources:    sources,
 			meta: []report.MetaItem{
-				{Label: "Source", Value: fmt.Sprintf("manifest (%s)", manifestFile)},
+				{Label: "Source", Value: fmt.Sprintf("manifest (%s)", source)},
 				{Label: "Dependencies scanned", Value: strconv.Itoa(len(purls))},
 			},
 		})
@@ -114,6 +160,10 @@ func init() {
 
 	manifestAuditCmd.Flags().StringVarP(&manifestFile, "file", "f", "",
 		"Path to the dependency manifest to audit (go.mod, package-lock.json, requirements.txt, Gemfile.lock, ...)")
+	manifestAuditCmd.Flags().StringVarP(&manifestDir, "directory", "d", "",
+		"Directory to recursively discover and audit manifests in (mutually exclusive with --file)")
+	manifestAuditCmd.Flags().IntVar(&maxDepth, "max-depth", 0,
+		"Max directory depth to descend with --directory (0 = unlimited)")
 
 	manifestOpts.addFlags(manifestAuditCmd)
 }

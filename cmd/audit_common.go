@@ -26,13 +26,14 @@ type auditOptions struct {
 }
 
 type auditRenderConfig struct {
-	data        []client.AuditItem
-	opts        *auditOptions
-	ignoreFile  *audit.IgnoreFile
-	baseURL     string
-	meta        []report.MetaItem
-	template    string
-	sarifSource string
+	data       []client.AuditItem
+	opts       *auditOptions
+	ignoreFile *audit.IgnoreFile
+	baseURL    string
+	meta       []report.MetaItem
+	template   string
+	sources    map[string]output.SourceLocation
+	source     string
 }
 
 // addFlags register the shared flags
@@ -72,12 +73,12 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 	}
 
 	return renderAudit(auditRenderConfig{
-		data:        data,
-		opts:        opts,
-		ignoreFile:  ignoreFile,
-		baseURL:     client.BaseURL(),
-		template:    "audit-linux",
-		sarifSource: fmt.Sprintf("%s/%s", info.OS, info.Version),
+		data:       data,
+		opts:       opts,
+		ignoreFile: ignoreFile,
+		baseURL:    client.BaseURL(),
+		template:   "audit-linux",
+		source:     fmt.Sprintf("%s/%s", info.OS, info.Version),
 		meta: []report.MetaItem{
 			{Label: "Target", Value: target.Describe()},
 			{Label: "OS", Value: fmt.Sprintf("%s %s", info.OS, info.Version)},
@@ -123,7 +124,7 @@ func renderAudit(cfg auditRenderConfig) error {
 		}
 	case "sarif":
 		r := audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
-		return output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), cfg.sarifSource)
+		return output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), cfg.source, cfg.sources)
 	case "csv":
 		r := audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
 		return output.WriteCSV(os.Stdout, r, "audit-details-csv")
