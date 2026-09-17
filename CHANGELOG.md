@@ -5,7 +5,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.5.0] - 2026-09-17
 
 ### Added
 
@@ -121,7 +121,8 @@ Initial public release of the ZEN SecDB CLI.
   and custom `template`/`html` via Go templates.
 - Automatic background update check and a `version` command.
 
-[Unreleased]: https://github.com/giterlizzi/secdb-cli/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/giterlizzi/secdb-cli/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/giterlizzi/secdb-cli/compare/v0.3.0...v0.3.1
 [0.3.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.2.0...v0.3.0
