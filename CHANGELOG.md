@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `audit manifest --directory <DIR>` (`-d`): recursively discover and audit every
+  supported manifest under a directory, instead of a single `--file`. Discovery
+  prunes noise directories (`.git`, `node_modules`, `vendor`, `target`, `dist`,
+  `build`, `testdata`, `site-packages`, ...) and does not follow symlinks;
+  `--max-depth` caps how deep the walk descends. A manifest that fails to parse is
+  skipped with a warning instead of aborting the scan.
+- `lsp`: the Language Server now discovers and audits every supported manifest in
+  the workspace on startup, so findings appear without opening each file (files
+  already open are audited by the edit path, not twice). Pass `--no-discovery` to
+  audit only files as they are opened.
+- SARIF export now attributes each finding to its source manifest, with a line
+  number where the parser tracks it (`go.mod`, `yarn.lock`, `requirements*.txt`,
+  `Gemfile.lock`), for `audit manifest` (including `--directory` scans).
+
+### Changed
+
+- `--base-url` is now validated: a value without a scheme and host is rejected
+  with a warning and the default is used instead.
+- The HTTP client timeout was raised from 60s to 120s to tolerate slower API
+  responses on large audits.
+
 ## [0.4.0] - 2026-09-08
 
 ### Added
