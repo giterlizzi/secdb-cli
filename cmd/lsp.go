@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var lspNoDiscovery bool
+
 var lspCmd = &cobra.Command{
 	Use:   "lsp",
 	Short: "Start the Language Server (LSP) for editor integration",
@@ -24,6 +26,11 @@ var lspCmd = &cobra.Command{
 		  - Gemfile.lock                                (Ruby)
 		  - pom.xml                                     (Maven)
 		  - composer.lock                               (PHP / Composer)
+
+		On startup the server also discovers and audits every supported manifest
+		in the workspace, so findings show up without opening each file (noise
+		directories like node_modules/vendor/target are skipped). Pass
+		--no-discovery to audit only files as they are opened.
 
 		The server speaks JSON-RPC over stdin/stdout, so it is meant to be
 		launched by an editor's LSP client, not run interactively (in a plain
@@ -42,7 +49,7 @@ var lspCmd = &cobra.Command{
 		      "secdb": {
 		        "command": ["secdb", "lsp"],
 		        "commandDebug": ["secdb", "lsp", "--debug"],
-		        "rootIndicationFileNames": ["go.mod", "package-lock.json", "requirements.txt", "Gemfile.lock", "pom.xml", "composer.lock"],
+		        "rootIndicationFileNames": ["go.mod", "package-lock.json", "yarn.lock", "requirements.txt", "Gemfile.lock", "pom.xml", "composer.lock"],
 		        "highlightingModeRegex": "^(Go|JSON|Python|Ruby|XML)$"
 		      }
 		    }
@@ -74,12 +81,22 @@ var lspCmd = &cobra.Command{
 		      })
 		    end,
 		  })
+
+		Zed (companion extension: github.com/giterlizzi/secdb-zed):
+
+		  Zed can't point at an arbitrary LSP binary from settings; install the
+		  extension and Zed starts "secdb lsp" on the recognized manifests. Note
+		  that Zed launches the server lazily, on opening the first recognized
+		  file; discovery then audits the rest of the workspace.
 	`),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return lsp.NewServer(newSecDbClient()).Run()
+		return lsp.NewServer(newSecDbClient(), !lspNoDiscovery).Run()
 	},
 }
 
 func init() {
+	lspCmd.Flags().BoolVar(&lspNoDiscovery, "no-discovery", false,
+		"Disable workspace discovery (only audit manifests as they are opened)")
+
 	rootCmd.AddCommand(lspCmd)
 }

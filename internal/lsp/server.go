@@ -5,6 +5,7 @@ package lsp
 import (
 	"log/slog"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -29,28 +30,34 @@ const (
 // Server is the secdb Language Server: it audits dependency manifests as they
 // are opened/edited and reports vulnerabilities as diagnostics.
 type Server struct {
-	client  *client.Client
-	handler protocol.Handler
-	mu      sync.Mutex
-	timers  map[protocol.DocumentUri]*time.Timer
+	client    *client.Client
+	handler   protocol.Handler
+	mu        sync.Mutex
+	timers    map[protocol.DocumentUri]*time.Timer
+	roots     []string
+	discovery bool
+	open      map[string]bool
 }
 
 // NewServer wires the LSP handler. The client is built by the caller (cmd), so
 // this package never imports cmd (which would be an import cycle).
-func NewServer(c *client.Client) *Server {
+func NewServer(c *client.Client, discovery bool) *Server {
 	s := &Server{
-		client: c,
-		timers: make(map[protocol.DocumentUri]*time.Timer),
+		client:    c,
+		timers:    make(map[protocol.DocumentUri]*time.Timer),
+		discovery: discovery,
+		open:      make(map[string]bool),
 	}
 
 	s.handler = protocol.Handler{
-		Initialize:            s.initialize,
-		Initialized:           s.initialized,
-		Shutdown:              s.shutdown,
-		TextDocumentDidOpen:   s.didOpen,
-		TextDocumentDidChange: s.didChange,
-		TextDocumentDidClose:  s.didClose,
-		TextDocumentDidSave:   s.didSave,
+		Initialize:                      s.initialize,
+		Initialized:                     s.initialized,
+		Shutdown:                        s.shutdown,
+		TextDocumentDidOpen:             s.didOpen,
+		TextDocumentDidChange:           s.didChange,
+		TextDocumentDidClose:            s.didClose,
+		TextDocumentDidSave:             s.didSave,
+		WorkspaceDidChangeConfiguration: s.didChangeConfiguration,
 	}
 	return s
 }
@@ -68,6 +75,19 @@ func (s *Server) initialize(ctx *glsp.Context, params *protocol.InitializeParams
 
 	version := strings.TrimPrefix(meta.Version, "v")
 
+	for _, f := range params.WorkspaceFolders {
+		if p, err := uriToFilename(f.URI); err == nil {
+			s.roots = append(s.roots, p)
+		}
+	}
+	if len(s.roots) == 0 && params.RootURI != nil {
+		if p, err := uriToFilename(*params.RootURI); err == nil {
+			s.roots = append(s.roots, p)
+		}
+	}
+
+	slog.Debug("workspace directories", "roots", s.roots)
+
 	return protocol.InitializeResult{
 		Capabilities: caps,
 		ServerInfo: &protocol.InitializeResultServerInfo{
@@ -79,6 +99,9 @@ func (s *Server) initialize(ctx *glsp.Context, params *protocol.InitializeParams
 
 func (s *Server) initialized(ctx *glsp.Context, params *protocol.InitializedParams) error {
 	slog.Debug("Initialized Language Server")
+	if s.discovery {
+		go s.discoverWorkspace(ctx)
+	}
 	return nil
 }
 
@@ -87,9 +110,17 @@ func (s *Server) shutdown(ctx *glsp.Context) error {
 	return nil
 }
 
+func (s *Server) didChangeConfiguration(ctx *glsp.Context, params *protocol.DidChangeConfigurationParams) error {
+	return nil
+}
+
 func (s *Server) didOpen(ctx *glsp.Context, params *protocol.DidOpenTextDocumentParams) error {
 	uri := string(params.TextDocument.URI)
 	slog.Debug("didOpen", "uri", uri)
+
+	s.mu.Lock()
+	s.open[uri] = true
+	s.mu.Unlock()
 
 	if err := s.auditManifest(ctx, uri, []byte(params.TextDocument.Text)); err != nil {
 		slog.Debug("audit failed", "error", err)
@@ -123,6 +154,7 @@ func (s *Server) didClose(ctx *glsp.Context, params *protocol.DidCloseTextDocume
 	if t, ok := s.timers[uri]; ok {
 		t.Stop()
 		delete(s.timers, uri)
+		delete(s.open, uri)
 	}
 	s.mu.Unlock()
 
@@ -188,6 +220,38 @@ func (s *Server) auditManifest(ctx *glsp.Context, uri protocol.DocumentUri, cont
 	return nil
 }
 
+func (s *Server) discoverWorkspace(ctx *glsp.Context) {
+	for _, root := range s.roots {
+		files, err := manifest.Discover(root, nil, 0)
+		if err != nil {
+			slog.Debug("workspace discovery failed", "root", root, "error", err)
+			continue
+		}
+		slog.Debug("workspace discovery", "root", root, "manifests", len(files))
+		for _, f := range files {
+
+			s.mu.Lock()
+			isOpen := s.open[filenameToURI(f)]
+			s.mu.Unlock()
+
+			if isOpen {
+				slog.Debug("discovery: skip open file", "file", f)
+				continue
+			}
+
+			content, err := os.ReadFile(f)
+			if err != nil {
+				slog.Debug("discovery: failed to read manifest", "file", f, "error", err)
+				continue
+			}
+
+			if err := s.auditManifest(ctx, filenameToURI(f), content); err != nil {
+				slog.Debug("discovery: audit failed", "file", f, "error", err)
+			}
+		}
+	}
+}
+
 func uriToFilename(uri protocol.DocumentUri) (string, error) {
 	u, err := url.Parse(string(uri))
 
@@ -196,6 +260,10 @@ func uriToFilename(uri protocol.DocumentUri) (string, error) {
 	}
 
 	return u.Path, nil
+}
+
+func filenameToURI(path string) protocol.DocumentUri {
+	return protocol.DocumentUri((&url.URL{Scheme: "file", Path: path}).String())
 }
 
 func buildDiagnostics(deps []manifest.Dependency, items []client.AuditItem, baseURL string) []protocol.Diagnostic {
