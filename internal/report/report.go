@@ -39,3 +39,17 @@ func (r *Report) AddMeta(items ...MetaItem) {
 func (r *Report) AddResults(results interface{}) {
 	r.Results = results
 }
+
+// MetaValue returns the value of the first meta row matching one of labels,
+// or "" if none match. Used to reuse the human-readable provenance each audit
+// command already computes for the text header.
+func (r *Report) MetaValue(labels ...string) string {
+	for _, want := range labels {
+		for _, m := range r.Meta {
+			if m.Label == want {
+				return m.Value
+			}
+		}
+	}
+	return ""
+}

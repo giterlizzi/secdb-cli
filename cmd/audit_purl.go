@@ -3,7 +3,7 @@
 package cmd
 
 import (
-	"fmt"
+	"errors"
 	"strconv"
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
@@ -24,26 +24,29 @@ var purlAuditCmd = &cobra.Command{
 	Use: "purl <PURL...>",
 	Example: heredoc.Doc(`
 		Simple:
-		  	secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1
+			secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1
 
 		From file:
-		  	secdb audit purl --file=purls.txt
+			secdb audit purl --file=purls.txt
 
 		From STDIN:
-		  	secdb audit purl < purls.txt
+			secdb audit purl < purls.txt
 
 		From pipe:
-		  	command | secdb audit purl
+			command | secdb audit purl
 
 		Using CycloneDX SBOM file (JSON):
-		  	syft packages dir:. -o cyclonedx-json > bom.json && secdb audit purl --sbom bom.json
-		  	cdxgen -o bom.json . && secdb audit purl --sbom bom.json
+			syft packages dir:. -o cyclonedx-json > bom.json && secdb audit purl --sbom bom.json
+			cdxgen -o bom.json . && secdb audit purl --sbom bom.json
 
 		CI:
-		  	secdb audit purl --sbom bom.json --fail-on=high
+			secdb audit purl --sbom bom.json --fail-on=high
+
+		Notify a webhook on high-severity findings:
+			SECDB_WEBHOOK_URL=https://... secdb audit purl --sbom bom.json --notify --notify-on=high
 
 		SARIF (e.g. for GitHub Code Scanning):
-		  	secdb audit purl --sbom bom.json --output=sarif > results.sarif
+			secdb audit purl --sbom bom.json --output=sarif > results.sarif
 	`),
 	Short: "Audit PURLs against ZEN SecDB",
 	Long: heredoc.Doc(`
@@ -95,7 +98,7 @@ var purlAuditCmd = &cobra.Command{
 		purls = audit.ValidatePURLs(util.Deduplicate(purls))
 
 		if len(purls) == 0 {
-			return fmt.Errorf("no PURLs provided: pass them as arguments, with --sbom, with --file, or via stdin")
+			return errors.New("no PURLs provided: pass them as arguments, with --sbom, with --file, or via stdin")
 		}
 
 		ignoreFile, err := audit.LoadIgnoreFile(purlOpts.ignoreFile)
