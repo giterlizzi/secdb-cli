@@ -13,11 +13,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// IgnorePackage optionally narrows an ignore rule to a specific package.
 type IgnorePackage struct {
 	Name    string `yaml:"name,omitempty"`
 	Version string `yaml:"version,omitempty"`
 }
 
+// IgnoreRule is a single rule from the ignore file.
 type IgnoreRule struct {
 	Vulnerability string         `yaml:"vulnerability,omitempty"`
 	Package       *IgnorePackage `yaml:"package,omitempty"`
@@ -25,10 +27,13 @@ type IgnoreRule struct {
 	Expires       string         `yaml:"expires,omitempty"`
 }
 
+// IgnoreFile is the parsed set of ignore rules (default .secdbignore).
 type IgnoreFile struct {
 	Ignore []IgnoreRule `yaml:"ignore"`
 }
 
+// LoadIgnoreFile reads the YAML ignore file at path, returning an empty (non-nil)
+// IgnoreFile when it does not exist.
 func LoadIgnoreFile(path string) (*IgnoreFile, error) {
 	data, err := os.ReadFile(path)
 	if os.IsNotExist(err) {
@@ -45,7 +50,13 @@ func LoadIgnoreFile(path string) (*IgnoreFile, error) {
 	return &f, nil
 }
 
+// IsIgnored reports whether an advisory (by ID or one of its CVEs, optionally
+// scoped to a package) matches a rule, returning the rule's reason.
 func (f *IgnoreFile) IsIgnored(advisoryID string, cves []string, purl string) (bool, string) {
+	if f == nil {
+		return false, ""
+	}
+
 	now := time.Now()
 
 	for _, rule := range f.Ignore {
@@ -66,11 +77,11 @@ func (f *IgnoreFile) IsIgnored(advisoryID string, cves []string, purl string) (b
 		if matched && rule.Package != nil {
 			parsed, _ := packageurl.FromString(purl)
 
-			if rule.Package.Name != "" && !(parsed.Name == rule.Package.Name) {
+			if rule.Package.Name != "" && parsed.Name != rule.Package.Name {
 				matched = false
 			}
 
-			if matched && rule.Package.Version != "" && !(parsed.Version == rule.Package.Version) {
+			if matched && rule.Package.Version != "" && parsed.Version != rule.Package.Version {
 				matched = false
 			}
 		}

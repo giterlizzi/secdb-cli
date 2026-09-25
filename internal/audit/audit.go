@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
+// Package audit shapes and filters audit results and handles PURL input.
 package audit
 
 import (
-	"fmt"
 	"log/slog"
 	"maps"
-	"os"
 	"slices"
 	"sort"
 	"strconv"
@@ -14,11 +13,9 @@ import (
 
 	"github.com/giterlizzi/secdb-cli/internal/client"
 	"github.com/giterlizzi/secdb-cli/internal/report"
-
-	cdx "github.com/CycloneDX/cyclonedx-go"
-	packageurl "github.com/package-url/packageurl-go"
 )
 
+// PackageResult is the per-package summary row (--view=summary).
 type PackageResult struct {
 	Package       string   `json:"package"`
 	CVEs          []string `json:"cves"`
@@ -27,6 +24,8 @@ type PackageResult struct {
 	MaxSeverity   string   `json:"max_severity"`
 }
 
+// AdvisoryResult is the per-advisory shaping (--view=details, SARIF, CSV), with
+// the packages it affects and ignore/unfixed annotations.
 type AdvisoryResult struct {
 	ID           string
 	Title        string
@@ -44,26 +43,60 @@ type AdvisoryResult struct {
 	Unfixed      bool
 }
 
+// SeverityLevels ranks severities so they can be compared and sorted.
 var SeverityLevels = map[string]int{
 	"critical": 5, "high": 4, "medium": 3, "moderate": 3, "low": 2, "info": 1, "unknown": 1, "": 0,
 }
 
+// hideUnfixed reports whether adv must be hidden from the audit output for
+// purl: an unfixed advisory is hidden unless showUnfixed is set. It centralizes
+// the default-hide-unfixed rule (and its debug log) shared by
+// SummarizePURLAudit, GroupByAdvisory and OverallSeverity.
+func hideUnfixed(purl string, adv client.Advisory, showUnfixed bool) bool {
+	if !showUnfixed && IsUnfixed(purl, adv) {
+		slog.Debug("unfixed", "purl", purl, "advisory", adv.ID)
+		return true
+	}
+	return false
+}
+
+// cweIDs returns the CWE IDs of an advisory's weaknesses.
+func cweIDs(adv client.Advisory) []string {
+	ids := make([]string, 0, len(adv.Weaknesses))
+	for _, w := range adv.Weaknesses {
+		ids = append(ids, w.ID)
+	}
+	return ids
+}
+
+// latestCVSSScore returns the base score of the advisory's highest available
+// CVSS version (e.g. prefers 4.0 over 3.1), or 0 when it carries no CVSS data.
+func latestCVSSScore(adv client.Advisory) float64 {
+	var version, score float64
+	for _, c := range adv.CVSS {
+		if c.Version >= version {
+			version = c.Version
+			score = c.BaseScore
+		}
+	}
+	return score
+}
+
+// OverallSeverity returns the highest severity across the results, skipping
+// ignored and (unless showUnfixed) unfixed advisories.
 func OverallSeverity(results []client.AuditItem, ignoreFile *IgnoreFile, showUnfixed bool) string {
 	maxSeverity := ""
 
 	for _, r := range results {
 		for _, adv := range r.Advisories {
 
-			if !showUnfixed && IsUnfixed(r.PURL, adv) {
-				slog.Debug("unfixed", "purl", r.PURL, "advisory", adv.ID)
+			if hideUnfixed(r.PURL, adv, showUnfixed) {
 				continue
 			}
 
-			if ignoreFile != nil {
-				if ignored, _ := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.PURL); ignored {
-					slog.Debug("ignored", "advisory", adv.ID, "cves", adv.CVEs, "purl", r.PURL)
-					continue
-				}
+			if ignored, _ := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.PURL); ignored {
+				slog.Debug("ignored", "advisory", adv.ID, "cves", adv.CVEs, "purl", r.PURL)
+				continue
 			}
 
 			severity := strings.ToLower(adv.Severity)
@@ -75,6 +108,7 @@ func OverallSeverity(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 	return maxSeverity
 }
 
+// SummarizePURLAudit shapes the results into one summary row per package.
 func SummarizePURLAudit(results []client.AuditItem, showUnfixed bool) []PackageResult {
 	out := make([]PackageResult, 0, len(results))
 
@@ -86,8 +120,7 @@ func SummarizePURLAudit(results []client.AuditItem, showUnfixed bool) []PackageR
 
 		for _, adv := range r.Advisories {
 
-			if !showUnfixed && IsUnfixed(r.PURL, adv) {
-				slog.Debug("unfixed", "purl", r.PURL, "advisory", adv.ID)
+			if hideUnfixed(r.PURL, adv, showUnfixed) {
 				continue
 			}
 
@@ -130,6 +163,8 @@ func SummarizePURLAudit(results []client.AuditItem, showUnfixed bool) []PackageR
 	return out
 }
 
+// GroupByAdvisory shapes the results into one row per advisory (severity-sorted),
+// annotating each with its affected packages and ignore/unfixed status.
 func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnfixed bool) report.Report {
 	byID := make(map[string]*AdvisoryResult)
 	var order []string
@@ -142,31 +177,11 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 
 			unfixed := IsUnfixed(r.PURL, adv)
 
-			if !showUnfixed && unfixed {
-				slog.Debug("unfixed", "purl", r.PURL, "advisory", adv.ID)
+			if hideUnfixed(r.PURL, adv, showUnfixed) {
 				continue
 			}
 
 			if _, exists := byID[adv.ID]; !exists {
-				cwesRaw := adv.Weaknesses
-				cwes := make([]string, 0, len(cwesRaw))
-
-				cvssArray := adv.CVSS
-				cvssScore := 0.0
-				cvssVersion := 0.0
-
-				for _, w := range cwesRaw {
-					cwes = append(cwes, w.ID)
-				}
-
-				for _, cvss := range cvssArray {
-					// Keep the score of the highest CVSS version available.
-					if cvss.Version >= cvssVersion {
-						cvssVersion = cvss.Version
-						cvssScore = cvss.BaseScore
-					}
-				}
-
 				ignored, reason := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.PURL)
 
 				if ignored {
@@ -181,8 +196,8 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 					URL:          adv.URL,
 					Severity:     strings.ToLower(adv.Severity),
 					CVEs:         adv.CVEs,
-					CWEs:         cwes,
-					CVSSScore:    cvssScore,
+					CWEs:         cweIDs(adv),
+					CVSSScore:    latestCVSSScore(adv),
 					Ignored:      ignored,
 					IgnoreReason: reason,
 					Unfixed:      unfixed,
@@ -241,61 +256,4 @@ func UnfixedCount(results []client.AuditItem) int {
 		}
 	}
 	return len(seen)
-}
-
-func ValidatePURLs(purls []string) []string {
-	valid := []string{}
-
-	for _, p := range purls {
-		purl, err := packageurl.FromString(p)
-		if err != nil {
-			slog.Debug("skipping invalid PURL", "value", p, "error", err)
-			continue
-		}
-		slog.Debug("found PURL", "purl", purl.ToString())
-		valid = append(valid, purl.ToString())
-	}
-
-	return valid
-}
-
-func ReadPURLsFromSBOM(path string) ([]string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, fmt.Errorf("open SBOM %s: %w", path, err)
-	}
-	defer f.Close()
-
-	bom := new(cdx.BOM)
-	decoder := cdx.NewBOMDecoder(f, cdx.BOMFileFormatJSON)
-
-	if err := decoder.Decode(bom); err != nil {
-		return nil, fmt.Errorf("failed to decode SBOM %s: %w", path, err)
-	}
-
-	if bom.Components == nil {
-		return nil, fmt.Errorf("no Components found in SBOM file")
-	}
-
-	purls := []string{}
-
-	var walk func(components *[]cdx.Component)
-
-	walk = func(components *[]cdx.Component) {
-		if components == nil {
-			return
-		}
-
-		for _, c := range *components {
-			if c.PackageURL != "" {
-				purls = append(purls, c.PackageURL)
-				slog.Debug("found PURL in CycloneDX SBOM component", slog.String("purl", c.PackageURL))
-			}
-			walk(c.Components)
-		}
-	}
-
-	walk(bom.Components)
-
-	return purls, nil
 }
