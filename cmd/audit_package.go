@@ -3,6 +3,10 @@
 package cmd
 
 import (
+	"fmt"
+	"net/url"
+	"strings"
+
 	"github.com/giterlizzi/secdb-cli/internal/inventory"
 
 	"github.com/MakeNowJust/heredoc/v2"
@@ -20,33 +24,69 @@ var (
 )
 
 var linuxAuditCmd = &cobra.Command{
-	Use:   "linux",
+	Use:   "linux [ssh://user@host:port]",
 	Short: "Audit the installed packages of a Linux system against ZEN SecDB",
 	Long: heredoc.Doc(`
 		Collects the OS identity and the installed-package list of a Linux system
 		and audits them against the ZEN SecDB for known vulnerabilities.
 
 		By default the local machine is audited (local auditing is only supported
-		on Linux). Use --host/--user/--port to audit a remote host over SSH, which
-		uses your ssh client, so ~/.ssh/config, the SSH agent and known_hosts all
-		apply. To audit a Docker image or container, use "secdb audit docker".
+		on Linux). To audit a remote host over SSH, pass an ssh:// URI as argument
+		(e.g. ssh://user@server.example.com:2222) or use --host/--user/--port. The
+		URI is a shorthand: the host, user and port it carries override those
+		flags, while --identity-file/--ssh-config/--sudo still apply. SSH uses your
+		ssh client, so ~/.ssh/config, the SSH agent and known_hosts all apply. To
+		audit a Docker image or container, use "secdb audit docker".
 
 		Only fixed, read-only commands are executed on the target: reading
 		/etc/os-release, "uname -m", and the distribution's package-list command
 		(dpkg-query / rpm / apk / ...).
 	`),
+	Args: cobra.MaximumNArgs(1),
 	Example: heredoc.Doc(`
 		Local system:
-		  	secdb audit linux
+			secdb audit linux
 
-		Remote host over SSH:
-		  	secdb audit linux --host server.example.com --user ops
+		Remote host over SSH (URI shorthand):
+			secdb audit linux ssh://user@server.example.com:2222
+
+		Remote host over SSH (flags):
+			secdb audit linux --host server.example.com --user ops
 
 		CI (fail on high/critical):
-		  	secdb audit linux --fail-on=high
+			secdb audit linux --fail-on=high
 	`),
-	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
+
+		if len(args) > 0 {
+			uri := args[0]
+
+			if !strings.Contains(uri, "://") {
+				uri = "ssh://" + uri
+			}
+
+			u, err := url.Parse(uri)
+			if err != nil {
+				return fmt.Errorf("invalid SSH URI %q: %w", uri, err)
+			}
+
+			if u.Scheme != "ssh" {
+				return fmt.Errorf("unknown scheme %q", u.Scheme)
+			}
+
+			if u.Hostname() != "" {
+				linuxHost = u.Hostname()
+
+				if u.Port() != "" {
+					linuxPort = u.Port()
+				}
+
+				if u.User.Username() != "" {
+					linuxUser = u.User.Username()
+				}
+			}
+		}
+
 		target := inventory.Target{
 			Host:         linuxHost,
 			Port:         linuxPort,
