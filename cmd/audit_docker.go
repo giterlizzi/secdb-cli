@@ -3,7 +3,7 @@
 package cmd
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/giterlizzi/secdb-cli/internal/inventory"
 
@@ -37,18 +37,18 @@ var dockerAuditCmd = &cobra.Command{
 	`),
 	Example: heredoc.Doc(`
 		Docker image (ephemeral):
-		  	secdb audit docker --image debian:12
+			secdb audit docker --image debian:12
 
 		Running container:
-		  	secdb audit docker --container my-running-container
+			secdb audit docker --container my-running-container
 
 		CI (fail on high/critical):
-		  	secdb audit docker --image myapp:latest --fail-on=high
+			secdb audit docker --image myapp:latest --fail-on=high
 	`),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if (dockerImage == "") == (dockerContainer == "") {
-			return fmt.Errorf("provide exactly one of --image or --container")
+			return errors.New("provide exactly one of --image or --container")
 		}
 
 		target := inventory.Target{

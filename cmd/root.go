@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+// Package cmd implements the secdb command-line interface.
 package cmd
 
 import (
@@ -92,7 +93,7 @@ func checkUpdateInBackground() <-chan string {
 
 	go func() {
 		defer close(ch)
-		available, releaseInfo, err := update.UpdateIsAvailable(meta.Version)
+		available, releaseInfo, err := update.IsAvailable(meta.Version)
 		if err != nil || !available {
 			return
 		}
@@ -122,7 +123,7 @@ func printUpdateNoticeIfReady() {
 
 func newSecDbClient() *client.Client {
 	c := client.NewClient().
-		WithApiKey(apiKey).
+		WithAPIKey(apiKey).
 		WithBaseURL(baseURL)
 	return c
 }
@@ -134,6 +135,7 @@ func newOutputOptions() output.Options {
 	}
 }
 
+// Execute runs the root command and exits non-zero on error.
 func Execute() {
 	err := rootCmd.Execute()
 	printUpdateNoticeIfReady()

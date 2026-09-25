@@ -8,6 +8,7 @@ package inventory
 
 import (
 	"bytes"
+	"errors"
 	"log/slog"
 	"os/exec"
 	"runtime"
@@ -185,7 +186,7 @@ func exitStatus(err error) int {
 	if err == nil {
 		return 0
 	}
-	if exitErr, ok := err.(*exec.ExitError); ok {
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
 		return exitErr.ExitCode()
 	}
 	return -1

@@ -1,9 +1,53 @@
 version: "2"
 
+run:
+  tests: true
+
+issues:
+  max-same-issues: 0
+  max-issues-per-linter: 0
+
 linters:
+  default: standard   # errcheck, govet, ineffassign, staticcheck, unused
   enable:
-    - gomodguard_v2
-  default: all
+    - bodyclose
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - nilerr
+    - revive
+    - unconvert
+    - perfsprint
+  settings:
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: error-strings
+        - name: error-naming
+        - name: indent-error-flow
+        - name: superfluous-else
+        - name: redefines-builtin-id
+        - name: context-as-argument
+        - name: receiver-naming
+    gosec:
+      excludes:
+        - G304   # "file path from variable"
+  exclusions:
+    generated: lax
+    rules:
+      - path: _test\.go
+        linters: [gosec, errcheck, bodyclose, unparam]
+    paths:
+      - dist
+      - bin
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
   exclusions:
     paths:
       - dist

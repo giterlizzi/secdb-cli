@@ -3,6 +3,7 @@
 package inventory
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"runtime"
@@ -42,7 +43,7 @@ func Collect(t Target) (*SystemInfo, error) {
 		return nil, err
 	}
 	if osr.ID == "" {
-		return nil, fmt.Errorf("could not identify the operating system (no readable /etc/os-release)")
+		return nil, errors.New("could not identify the operating system (no readable /etc/os-release)")
 	}
 
 	arch := ""

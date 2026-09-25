@@ -39,7 +39,7 @@ func TestUpdateIsAvailable_CachedNewerVersion(t *testing.T) {
 		LatestVersion: "v2.0.0",
 	})
 
-	available, releaseInfo, err := UpdateIsAvailable("v1.0.0")
+	available, releaseInfo, err := IsAvailable("v1.0.0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestUpdateIsAvailable_AlreadyLatest(t *testing.T) {
 		LatestVersion: "v1.0.0",
 	})
 
-	available, release, err := UpdateIsAvailable("v1.0.0")
+	available, release, err := IsAvailable("v1.0.0")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

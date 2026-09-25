@@ -9,18 +9,18 @@ import (
 	packageurl "github.com/package-url/packageurl-go"
 )
 
-// RubyParser handles Gemfile.lock. Inside the "specs:" section, a gem resolved
+// rubyParser handles Gemfile.lock. Inside the "specs:" section, a gem resolved
 // to a concrete version is indented exactly four spaces with the version in
 // parentheses ("    rails (7.0.4)"); its own dependency constraints are indented
 // six spaces and are skipped.
-type RubyParser struct{}
+type rubyParser struct{}
 
-func (RubyParser) Ecosystem() string  { return "ruby" }
-func (RubyParser) Patterns() []string { return []string{"Gemfile.lock"} }
+func (rubyParser) Ecosystem() string  { return "ruby" }
+func (rubyParser) Patterns() []string { return []string{"Gemfile.lock"} }
 
 var gemSpecRe = regexp.MustCompile(`^    ([A-Za-z0-9._-]+) \(([^)]+)\)$`)
 
-func (RubyParser) Parse(filename string, content []byte) ([]Dependency, error) {
+func (rubyParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	var deps []Dependency
 	inSpecs := false
 

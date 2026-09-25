@@ -3,7 +3,7 @@
 package cmd
 
 import (
-	"fmt"
+	"errors"
 	"os"
 	"strings"
 
@@ -35,7 +35,7 @@ var cveCmd = &cobra.Command{
 		cveID := strings.ToUpper(args[0])
 
 		if !util.IsValidCVE(cveID) {
-			return fmt.Errorf("invalid CVE identifier")
+			return errors.New("invalid CVE identifier")
 		}
 
 		client := newSecDbClient()

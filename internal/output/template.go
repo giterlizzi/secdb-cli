@@ -3,6 +3,7 @@
 package output
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -39,5 +40,5 @@ func templateSource(opts Options) (string, error) {
 	if opts.TemplateExpression != "" {
 		return opts.TemplateExpression, nil
 	}
-	return "", fmt.Errorf("--template=STRING or --template-file=PATH is required with --output=template")
+	return "", errors.New("--template=STRING or --template-file=PATH is required with --output=template")
 }

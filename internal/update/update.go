@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
+// Package update checks GitHub for a newer release, caching the result.
 package update
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +16,7 @@ import (
 	"golang.org/x/mod/semver"
 )
 
+// State is the cached update-check state persisted between runs.
 type State struct {
 	LastChecked       time.Time `json:"last_checked"`
 	LatestVersion     string    `json:"latest_version"`
@@ -21,6 +24,7 @@ type State struct {
 	LatestPublishedAt time.Time `json:"latest_published_at"`
 }
 
+// ReleaseInfo describes the latest GitHub release.
 type ReleaseInfo struct {
 	Version     string    `json:"tag_name"`
 	URL         string    `json:"html_url"`
@@ -36,7 +40,7 @@ func stateFilePath() (string, error) {
 	}
 
 	appDir := filepath.Join(dir, "secdb-cli")
-	if err := os.MkdirAll(appDir, 0755); err != nil {
+	if err := os.MkdirAll(appDir, 0750); err != nil {
 		return "", err
 	}
 
@@ -73,7 +77,7 @@ func (s *State) save() error {
 		return err
 	}
 
-	return os.WriteFile(path, data, 0o644)
+	return os.WriteFile(path, data, 0600)
 }
 
 func fetchLatest() (*ReleaseInfo, error) {
@@ -99,7 +103,7 @@ func fetchLatest() (*ReleaseInfo, error) {
 	switch resp.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return nil, fmt.Errorf("no release published on GitHub")
+		return nil, errors.New("no release published on GitHub")
 	default:
 		return nil, fmt.Errorf("GitHub API error (status %d): %s", resp.StatusCode, string(body))
 	}
@@ -113,7 +117,9 @@ func fetchLatest() (*ReleaseInfo, error) {
 	return &release, nil
 }
 
-func UpdateIsAvailable(currentVersion string) (bool, *ReleaseInfo, error) {
+// IsAvailable reports whether a newer release exists, using the cached
+// state to skip the network when it is fresh.
+func IsAvailable(currentVersion string) (bool, *ReleaseInfo, error) {
 
 	const updateCheckInterval = 24 * time.Hour
 

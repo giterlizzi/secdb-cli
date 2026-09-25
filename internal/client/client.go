@@ -7,6 +7,7 @@
 package client
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -22,17 +23,20 @@ const defaultBaseURL = "https://secdb.nttzen.cloud"
 
 var userAgent = fmt.Sprintf("secdb-cli/%s (+https://github.com/giterlizzi/secdb-cli)", meta.Version)
 
+// Client is an HTTP client for the ZEN SecDB API.
 type Client struct {
 	baseURL    string
 	apiKey     string
 	httpClient *http.Client
 }
 
-type ClientResponse struct {
+// Response holds a decoded API response.
+type Response struct {
 	Body   []byte
 	Header *http.Header
 }
 
+// NewClient returns a Client with the default base URL and timeout.
 func NewClient() *Client {
 	return &Client{
 		baseURL:    defaultBaseURL,
@@ -40,13 +44,17 @@ func NewClient() *Client {
 	}
 }
 
-func (c *Client) WithApiKey(apiKey string) *Client {
+// WithAPIKey sets the API key sent with each request (no-op when empty) and
+// returns the client for chaining.
+func (c *Client) WithAPIKey(apiKey string) *Client {
 	if apiKey != "" {
 		c.apiKey = apiKey
 	}
 	return c
 }
 
+// WithBaseURL overrides the API base URL (no-op when empty) and returns the
+// client for chaining.
 func (c *Client) WithBaseURL(baseURL string) *Client {
 	if baseURL != "" {
 		if u, err := url.Parse(baseURL); err == nil && u.Scheme != "" && u.Host != "" {
@@ -65,7 +73,7 @@ func (c *Client) BaseURL() string {
 	return c.baseURL
 }
 
-func (c *Client) request(req *http.Request) (ClientResponse, error) {
+func (c *Client) request(req *http.Request) (Response, error) {
 
 	req.Header = http.Header{
 		"Content-Type": {"application/json"},
@@ -80,7 +88,7 @@ func (c *Client) request(req *http.Request) (ClientResponse, error) {
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return ClientResponse{}, fmt.Errorf("request failed: %w", err)
+		return Response{}, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() { _ = res.Body.Close() }()
 
@@ -89,40 +97,40 @@ func (c *Client) request(req *http.Request) (ClientResponse, error) {
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return ClientResponse{}, fmt.Errorf("read body: %w", err)
+		return Response{}, fmt.Errorf("read body: %w", err)
 	}
 
 	switch res.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return ClientResponse{}, fmt.Errorf("not found")
+		return Response{}, errors.New("not found")
 	case http.StatusUnauthorized:
-		return ClientResponse{}, fmt.Errorf("unauthorized")
+		return Response{}, errors.New("unauthorized")
 	case http.StatusTooManyRequests:
-		return ClientResponse{}, fmt.Errorf("rate-limit error")
+		return Response{}, errors.New("rate-limit error")
 	default:
-		return ClientResponse{}, fmt.Errorf("API error (status %d): %s", res.StatusCode, string(body))
+		return Response{}, fmt.Errorf("API error (status %d): %s", res.StatusCode, string(body))
 	}
 
-	return ClientResponse{
+	return Response{
 		Body:   body,
 		Header: &res.Header,
 	}, nil
 }
 
-func (c *Client) get(path string) (ClientResponse, error) {
+func (c *Client) get(path string) (Response, error) {
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
-		return ClientResponse{}, fmt.Errorf("build request: %w", err)
+		return Response{}, fmt.Errorf("build request: %w", err)
 	}
 
 	return c.request(req)
 }
 
-func (c *Client) post(path string, body io.Reader) (ClientResponse, error) {
+func (c *Client) post(path string, body io.Reader) (Response, error) {
 	req, err := http.NewRequest(http.MethodPost, c.baseURL+path, body)
 	if err != nil {
-		return ClientResponse{}, fmt.Errorf("build request: %w", err)
+		return Response{}, fmt.Errorf("build request: %w", err)
 	}
 
 	return c.request(req)

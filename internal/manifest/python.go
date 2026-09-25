@@ -9,14 +9,14 @@ import (
 	packageurl "github.com/package-url/packageurl-go"
 )
 
-// PythonParser handles requirements*.txt. It's line-based, so every dependency
+// pythonParser handles requirements*.txt. It's line-based, so every dependency
 // records its source line. "-r"/"-c" includes and option lines are skipped (no
 // cross-file resolution); a dependency is emitted only when the line pins a
 // version.
-type PythonParser struct{}
+type pythonParser struct{}
 
-func (PythonParser) Ecosystem() string  { return "python" }
-func (PythonParser) Patterns() []string { return []string{"requirements*.txt"} }
+func (pythonParser) Ecosystem() string  { return "python" }
+func (pythonParser) Patterns() []string { return []string{"requirements*.txt"} }
 
 // pyRequirementRe captures the name, an optional "[extras]", a comparison
 // operator, and a version from a requirement line (e.g. "Django[argon2]>=4.2").
@@ -24,7 +24,7 @@ var pyRequirementRe = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[
 
 var pep503Re = regexp.MustCompile(`[-_.]+`)
 
-func (PythonParser) Parse(filename string, content []byte) ([]Dependency, error) {
+func (pythonParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	var deps []Dependency
 
 	for i, raw := range strings.Split(string(content), "\n") {

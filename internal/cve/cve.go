@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+// Package cve provides CVE enrichment.
 package cve
 
 import (
@@ -11,6 +12,8 @@ type vendorCount struct {
 	Count  int
 }
 
+// SummarizeAffectedProducts enriches the raw CVE data map in place with
+// affected-vendor and affected/not-affected totals.
 func SummarizeAffectedProducts(data map[string]interface{}) {
 	raw, ok := data["affected_products"].([]interface{})
 	if !ok {

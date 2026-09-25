@@ -8,8 +8,9 @@ import (
 	"strings"
 )
 
+// GetCVE fetches a CVE by ID, expanding the given related resources.
 func (c *Client) GetCVE(id string, expand ...string) (map[string]interface{}, error) {
-	path := fmt.Sprintf("/api/v1/feed/cve/%s", id)
+	path := "/api/v1/feed/cve/" + id
 	if len(expand) > 0 {
 		path += "?expand=" + strings.Join(expand, ",")
 	}

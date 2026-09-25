@@ -78,12 +78,12 @@ var DefaultSkipDirs = map[string]bool{
 }
 
 var parsers = []Parser{
-	ComposerParser{},
-	GoModParser{},
-	MavenParser{},
-	NPMParser{},
-	PythonParser{},
-	RubyParser{},
+	composerParser{},
+	goModParser{},
+	mavenParser{},
+	npmParser{},
+	pythonParser{},
+	rubyParser{},
 }
 
 // ParserFor returns the parser that handles path (matched by base name), or nil

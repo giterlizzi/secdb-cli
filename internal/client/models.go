@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// This file holds the request/response models (DTOs) of the ZEN SecDB API. They
-// are plain data shapes with no behaviour; the transport lives in client.go and
-// the domain logic that interprets them (e.g. "is this advisory unfixed?")
-// lives in internal/audit.
+// This file holds the request/response models (DTOs) of the ZEN SecDB API.
+
 package client
 
 import "time"
@@ -19,6 +17,7 @@ type linuxAuditRequest struct {
 	Packages []string `json:"packages"`
 }
 
+// AuditItem is one package and the advisories affecting it.
 type AuditItem struct {
 	Package    string                 `json:"package"`
 	PURL       string                 `json:"purl"`
@@ -27,10 +26,12 @@ type AuditItem struct {
 	Advisories []Advisory             `json:"advisories"`
 }
 
+// Timestamp is a time.Time that decodes the API's timestamp format.
 type Timestamp struct {
 	time.Time
 }
 
+// UnmarshalJSON decodes the API's timestamp layout.
 func (t *Timestamp) UnmarshalJSON(b []byte) (err error) {
 	date, err := time.Parse(`"2006-01-02T15:04:05"`, string(b))
 	if err != nil {
@@ -40,6 +41,7 @@ func (t *Timestamp) UnmarshalJSON(b []byte) (err error) {
 	return
 }
 
+// Advisory is a security advisory returned by the audit endpoints.
 type Advisory struct {
 	ID             string    `json:"id"`
 	Type           string    `json:"type"`
@@ -86,6 +88,7 @@ type ssvcBulkRequest struct {
 	PublicWellBeingImpact string   `json:"public_well_being_impact"`
 }
 
+// SSVCBulkResponse is one CVE's entry in a bulk SSVC response.
 type SSVCBulkResponse struct {
 	CVE struct {
 		ID    string `json:"id" yaml:"id"`
@@ -97,6 +100,7 @@ type SSVCBulkResponse struct {
 	VectorString string `json:"vector_string" yaml:"vector_string"`
 }
 
+// SSVCResponse is the SSVC decision for a CVE.
 type SSVCResponse struct {
 	Exploitation           string `json:"exploitation" yaml:"exploitation"`
 	Automatable            string `json:"automatable" yaml:"automatable"`

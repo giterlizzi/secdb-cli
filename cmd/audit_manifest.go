@@ -3,6 +3,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -28,26 +29,26 @@ var manifestAuditCmd = &cobra.Command{
 	Use: "manifest (--file <FILE> | --directory <DIR>)",
 	Example: heredoc.Doc(`
 		Go modules:
-		  	secdb audit manifest --file go.mod
+			secdb audit manifest --file go.mod
 
 		npm (lockfiles):
-		  	secdb audit manifest --file package-lock.json
-		  	secdb audit manifest --file yarn.lock
+			secdb audit manifest --file package-lock.json
+			secdb audit manifest --file yarn.lock
 
 		Python / Ruby:
-		  	secdb audit manifest --file requirements.txt
-		  	secdb audit manifest --file Gemfile.lock
+			secdb audit manifest --file requirements.txt
+			secdb audit manifest --file Gemfile.lock
 
 		Java / PHP:
-		  	secdb audit manifest --file pom.xml
-		  	secdb audit manifest --file composer.lock
+			secdb audit manifest --file pom.xml
+			secdb audit manifest --file composer.lock
 
 		Discover and audit every manifest under a directory (recursively):
-		  	secdb audit manifest --directory .
-		  	secdb audit manifest --directory ./services --max-depth 3
+			secdb audit manifest --directory .
+			secdb audit manifest --directory ./services --max-depth 3
 
 		CI (fail on high or critical):
-		  	secdb audit manifest --file go.mod --fail-on=high
+			secdb audit manifest --file go.mod --fail-on=high
 	`),
 	Short: "Audit a dependency manifest against ZEN SecDB",
 	Long: heredoc.Doc(`
@@ -84,7 +85,7 @@ var manifestAuditCmd = &cobra.Command{
 
 		switch {
 		case manifestDir != "" && manifestFile != "":
-			return fmt.Errorf("--file and --directory are mutually exclusive")
+			return errors.New("--file and --directory are mutually exclusive")
 		case manifestDir != "":
 			files, err = manifest.Discover(manifestDir, nil, maxDepth)
 			if err != nil {
@@ -96,7 +97,7 @@ var manifestAuditCmd = &cobra.Command{
 		case manifestFile != "":
 			files = []string{manifestFile}
 		default:
-			return fmt.Errorf("--file or --directory is required")
+			return errors.New("--file or --directory is required")
 		}
 
 		var purls []string

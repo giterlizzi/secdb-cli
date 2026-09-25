@@ -3,6 +3,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -62,7 +63,7 @@ var ssvcCalculateCmd = &cobra.Command{
 			return err
 		}
 		if len(cveIDs) == 0 {
-			return fmt.Errorf("no CVEs provided: pass them as arguments, with --file, or via stdin")
+			return errors.New("no CVEs provided: pass them as arguments, with --file, or via stdin")
 		}
 
 		for i, id := range cveIDs {
@@ -97,6 +98,8 @@ func init() {
 	ssvcCalculateCmd.Flags().StringVar(&publicWellBeingImpact, "public-well-being-impact", "",
 		"Public well-being impact: minimal, material, or irreversible (required)")
 
-	ssvcCalculateCmd.MarkFlagRequired("mission-prevalence")
-	ssvcCalculateCmd.MarkFlagRequired("public-well-being-impact")
+	// Errors here only occur if the flag name is wrong (a programming bug), and
+	// this runs in init(), so ignore them explicitly.
+	_ = ssvcCalculateCmd.MarkFlagRequired("mission-prevalence")
+	_ = ssvcCalculateCmd.MarkFlagRequired("public-well-being-impact")
 }

@@ -33,7 +33,7 @@ var updateCheckCmd = &cobra.Command{
 			return nil
 		}
 
-		isAvailable, releaseInfo, err := update.UpdateIsAvailable(meta.Version)
+		isAvailable, releaseInfo, err := update.IsAvailable(meta.Version)
 
 		if err != nil {
 			fmt.Printf("%s\n", err)

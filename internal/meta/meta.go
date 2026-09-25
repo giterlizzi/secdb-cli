@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+// Package meta holds build-time version information injected via -ldflags.
 package meta
 
 // export VERSION=`git describe --tags --abbrev=0`
@@ -18,6 +19,6 @@ var (
 	// Branch is the branch of the program
 	Branch = "0"
 
-	// Date is the date of the build - date -u '+%Y-%m-%dT%H:%M:%SZ'
+	// BuildDate is the build timestamp (UTC, RFC3339).
 	BuildDate = "0"
 )

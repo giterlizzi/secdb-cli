@@ -19,13 +19,13 @@ type composerLockPkg struct {
 	Version string `json:"version"`
 }
 
-// ComposerParser handles PHP composer.lock file.
-type ComposerParser struct{}
+// composerParser handles PHP composer.lock file.
+type composerParser struct{}
 
-func (ComposerParser) Ecosystem() string  { return "composer" }
-func (ComposerParser) Patterns() []string { return []string{"composer.lock"} }
+func (composerParser) Ecosystem() string  { return "composer" }
+func (composerParser) Patterns() []string { return []string{"composer.lock"} }
 
-func (ComposerParser) Parse(filename string, content []byte) ([]Dependency, error) {
+func (composerParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	var lock composerLock
 	if err := json.Unmarshal(content, &lock); err != nil {
 		return nil, err

@@ -44,13 +44,13 @@ type pomProperty struct {
 	Value   string `xml:",chardata"`
 }
 
-// MavenParser handles pom.xml.
-type MavenParser struct{}
+// mavenParser handles pom.xml.
+type mavenParser struct{}
 
-func (MavenParser) Ecosystem() string  { return "maven" }
-func (MavenParser) Patterns() []string { return []string{"pom.xml"} }
+func (mavenParser) Ecosystem() string  { return "maven" }
+func (mavenParser) Patterns() []string { return []string{"pom.xml"} }
 
-func (MavenParser) Parse(filename string, content []byte) ([]Dependency, error) {
+func (mavenParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	var pom pomProject
 	if err := xml.Unmarshal(content, &pom); err != nil {
 		return nil, err

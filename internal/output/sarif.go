@@ -16,6 +16,8 @@ import (
 	"github.com/owenrumney/go-sarif/v3/pkg/report/v210/sarif"
 )
 
+// WriteSARIF writes the advisories as a SARIF 2.1.0 report, attributing each
+// finding to its source file/line when known via sources.
 func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile string, sources map[string]SourceLocation) error {
 	sarifReport := report.NewV210Report()
 
@@ -31,14 +33,14 @@ func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile strin
 				file, line = loc.File, loc.Line
 			}
 
-			ruleId := fmt.Sprintf("%s-%s", adv.ID, purl)
+			ruleID := fmt.Sprintf("%s-%s", adv.ID, purl)
 			resultTitle := fmt.Sprintf("A %s vulnerability in %s was found: %s", adv.Severity, purl, adv.Title)
 
 			fullDescription := buildFullDescription(adv)
 			shortDescription := fmt.Sprintf("[%s] %s vulnerability for %s package", adv.ID, adv.Severity, purl)
 
-			rule := run.AddRule(ruleId)
-			rule.WithName(ruleId)
+			rule := run.AddRule(ruleID)
+			rule.WithName(ruleID)
 			rule.WithDescription(shortDescription)
 			rule.WithHelpURI(adv.URL)
 
@@ -58,7 +60,7 @@ func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile strin
 				phys.WithRegion(sarif.NewRegion().WithStartLine(line))
 			}
 
-			result := run.CreateResultForRule(ruleId)
+			result := run.CreateResultForRule(ruleID)
 			result.WithLevel(severityToSARIFLevel(adv)).
 				WithMessage(sarif.NewTextMessage(resultTitle)).
 				WithLocations([]*sarif.Location{
@@ -104,9 +106,7 @@ func buildTags(advisory audit.AdvisoryResult) []string {
 	for _, cwe := range advisory.CWEs {
 		tags = append(tags, "external/cwe/"+strings.ToLower(cwe))
 	}
-	for _, cve := range advisory.CVEs {
-		tags = append(tags, cve)
-	}
+	tags = append(tags, advisory.CVEs...)
 	return tags
 }
 

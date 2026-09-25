@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+// Package output renders results as text, JSON, YAML, templates, HTML, SARIF or CSV.
 package output
 
 import (
@@ -13,8 +14,10 @@ import (
 	"github.com/Masterminds/sprig/v3"
 )
 
+// Format is an output format selector.
 type Format string
 
+// Supported output formats.
 const (
 	JSON     Format = "json"
 	Template Format = "template"
@@ -22,11 +25,14 @@ const (
 	YAML     Format = "yaml"
 )
 
+// Options holds renderer options for the template/HTML formats.
 type Options struct {
 	TemplateFile       string
 	TemplateExpression string
 }
 
+// SourceLocation maps a PURL to the manifest file and line it came from, for
+// SARIF attribution.
 type SourceLocation struct {
 	PURL string
 	File string
@@ -52,6 +58,7 @@ func funcMap() template.FuncMap {
 	return fm
 }
 
+// Render writes data to w in the given format.
 func Render(w io.Writer, data interface{}, format Format, opts Options) error {
 	switch format {
 	case JSON:
@@ -67,6 +74,7 @@ func Render(w io.Writer, data interface{}, format Format, opts Options) error {
 	}
 }
 
+// SeverityMarkdown returns a colored emoji badge for a severity, for text/Markdown output.
 func SeverityMarkdown(severity string) string {
 	var emoji string
 
@@ -88,6 +96,7 @@ func SeverityMarkdown(severity string) string {
 	return fmt.Sprintf("%s **%s**", emoji, strings.ToUpper(severity))
 }
 
+// SSVCDecisionMarkdown returns a colored emoji badge for an SSVC decision, for text/Markdown output.
 func SSVCDecisionMarkdown(decision string) string {
 	var emoji string
 	switch decision {

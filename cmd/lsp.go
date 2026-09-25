@@ -40,7 +40,7 @@ var lspCmd = &cobra.Command{
 	Example: heredoc.Doc(`
 		Run the server (usually done by the editor, not by hand):
 	        
-		  secdb lsp
+			secdb lsp
 
 		Kate (Settings > LSP Client > User Server Settings):
 

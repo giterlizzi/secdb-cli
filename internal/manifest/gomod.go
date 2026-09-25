@@ -9,15 +9,15 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
-// GoModParser handles go.mod. It uses golang.org/x/mod/modfile, which yields the
+// goModParser handles go.mod. It uses golang.org/x/mod/modfile, which yields the
 // exact source line of every require directive for free, so Go dependencies get
 // precise ranges (unlike the JSON lock files).
-type GoModParser struct{}
+type goModParser struct{}
 
-func (GoModParser) Ecosystem() string  { return "go" }
-func (GoModParser) Patterns() []string { return []string{"go.mod"} }
+func (goModParser) Ecosystem() string  { return "go" }
+func (goModParser) Patterns() []string { return []string{"go.mod"} }
 
-func (GoModParser) Parse(filename string, content []byte) ([]Dependency, error) {
+func (goModParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	m, err := modfile.ParseLax(filename, content, nil)
 	if err != nil {
 		return nil, err

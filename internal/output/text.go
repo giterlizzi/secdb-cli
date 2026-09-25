@@ -73,13 +73,14 @@ func writeMarkdown(w io.Writer, markdown string, wrap int) error {
 }
 
 // TerminalWrap returns a Markdown word-wrap width: the current stdout terminal
-// width, capped at max. It falls back to max when the width can't be determined
-// (e.g. stdout isn't a terminal, in which case raw Markdown is emitted anyway).
-func TerminalWrap(max int) int {
-	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 && w < max {
+// width, capped at maxWidth. It falls back to maxWidth when the width can't be
+// determined (e.g. stdout isn't a terminal, in which case raw Markdown is
+// emitted anyway).
+func TerminalWrap(maxWidth int) int {
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 && w < maxWidth {
 		return w
 	}
-	return max
+	return maxWidth
 }
 
 func isTerminal(w io.Writer) bool {

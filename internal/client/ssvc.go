@@ -8,6 +8,7 @@ import (
 	"fmt"
 )
 
+// SSVCBulk calculates SSVC decisions for the given CVEs in one request.
 func (c *Client) SSVCBulk(cveIDs []string, missionPrevalence string, publicWellBeingImpact string) ([]SSVCBulkResponse, error) {
 	payload, err := json.Marshal(ssvcBulkRequest{
 		CVEs:                  cveIDs,

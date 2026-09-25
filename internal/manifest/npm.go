@@ -10,19 +10,19 @@ import (
 	packageurl "github.com/package-url/packageurl-go"
 )
 
-// NPMParser handles the resolved npm lockfiles. package-lock.json isn't parsed
+// npmParser handles the resolved npm lockfiles. package-lock.json isn't parsed
 // with position tracking, so its dependencies carry an empty Range; yarn.lock is
 // line-based, so it does record the header line of each entry. package.json is
 // intentionally not handled: its version ranges describe what's allowed, not
 // what's installed, so auditing it would be imprecise.
-type NPMParser struct{}
+type npmParser struct{}
 
-func (NPMParser) Ecosystem() string { return "npm" }
-func (NPMParser) Patterns() []string {
+func (npmParser) Ecosystem() string { return "npm" }
+func (npmParser) Patterns() []string {
 	return []string{"package-lock.json", "yarn.lock"}
 }
 
-func (NPMParser) Parse(filename string, content []byte) ([]Dependency, error) {
+func (npmParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	if filename == "yarn.lock" {
 		return parseYarnLock(content)
 	}
@@ -35,8 +35,8 @@ func (NPMParser) Parse(filename string, content []byte) ([]Dependency, error) {
 func npmPURL(name, version string) string {
 	namespace := ""
 	if strings.HasPrefix(name, "@") {
-		if i := strings.Index(name, "/"); i >= 0 {
-			namespace, name = name[:i], name[i+1:]
+		if ns, rest, ok := strings.Cut(name, "/"); ok {
+			namespace, name = ns, rest
 		}
 	}
 	return packageurl.NewPackageURL("npm", namespace, name, version, nil, "").ToString()

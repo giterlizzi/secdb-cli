@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+// Package lsp implements a Language Server that audits dependency manifests.
 package lsp
 
 import (
@@ -115,7 +116,7 @@ func (s *Server) didChangeConfiguration(ctx *glsp.Context, params *protocol.DidC
 }
 
 func (s *Server) didOpen(ctx *glsp.Context, params *protocol.DidOpenTextDocumentParams) error {
-	uri := string(params.TextDocument.URI)
+	uri := params.TextDocument.URI
 	slog.Debug("didOpen", "uri", uri)
 
 	s.mu.Lock()
@@ -138,7 +139,7 @@ func (s *Server) didChange(ctx *glsp.Context, params *protocol.DidChangeTextDocu
 		return nil
 	}
 
-	uri := string(params.TextDocument.URI)
+	uri := params.TextDocument.URI
 
 	s.delayAuditManifest(ctx, uri, []byte(change.Text))
 	slog.Debug("didChange", "uri", uri)
@@ -149,7 +150,7 @@ func (s *Server) didChange(ctx *glsp.Context, params *protocol.DidChangeTextDocu
 func (s *Server) didClose(ctx *glsp.Context, params *protocol.DidCloseTextDocumentParams) error {
 	s.mu.Lock()
 
-	uri := string(params.TextDocument.URI)
+	uri := params.TextDocument.URI
 
 	if t, ok := s.timers[uri]; ok {
 		t.Stop()
@@ -175,7 +176,7 @@ func (s *Server) delayAuditManifest(ctx *glsp.Context, uri protocol.DocumentUri,
 		t.Stop()
 	}
 	s.timers[uri] = time.AfterFunc(delay, func() {
-		if err := s.auditManifest(ctx, uri, []byte(content)); err != nil {
+		if err := s.auditManifest(ctx, uri, content); err != nil {
 			slog.Debug("audit failed", "error", err)
 		}
 	})
@@ -253,7 +254,7 @@ func (s *Server) discoverWorkspace(ctx *glsp.Context) {
 }
 
 func uriToFilename(uri protocol.DocumentUri) (string, error) {
-	u, err := url.Parse(string(uri))
+	u, err := url.Parse(uri)
 
 	if err != nil {
 		return "", err
@@ -263,7 +264,7 @@ func uriToFilename(uri protocol.DocumentUri) (string, error) {
 }
 
 func filenameToURI(path string) protocol.DocumentUri {
-	return protocol.DocumentUri((&url.URL{Scheme: "file", Path: path}).String())
+	return (&url.URL{Scheme: "file", Path: path}).String()
 }
 
 func buildDiagnostics(deps []manifest.Dependency, items []client.AuditItem, baseURL string) []protocol.Diagnostic {
