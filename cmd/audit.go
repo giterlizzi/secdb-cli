@@ -8,8 +8,9 @@ import (
 )
 
 var auditCmd = &cobra.Command{
-	Use:   "audit",
-	Short: "Audit software packages and dependencies",
+	Use:     "audit",
+	GroupID: groupAudit,
+	Short:   "Audit software packages and dependencies",
 	Long: heredoc.Doc(`
 		Audit software packages and dependencies against the ZEN SecDB to
 		identify known vulnerabilities and security issues.

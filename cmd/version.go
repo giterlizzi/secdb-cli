@@ -13,8 +13,8 @@ import (
 
 var versionCmd = &cobra.Command{
 	Use:     "version",
-	Aliases: []string{"v"},
-	Short:   "Show version information for ZEN SecDB CLI",
+	GroupID: groupOther,
+	Short:   "Show version and build information",
 	Long: heredoc.Doc(`
 		Prints the installed secdb version and the commit it was built from.
 		Include this information when reporting a bug.

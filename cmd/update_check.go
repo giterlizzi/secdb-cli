@@ -16,8 +16,8 @@ import (
 
 var updateCheckCmd = &cobra.Command{
 	Use:     "check-update",
-	Aliases: []string{"update"},
-	Short:   "Check for the latest secdb-cli version.",
+	GroupID: groupOther,
+	Short:   "Check for a newer secdb release",
 	Long: heredoc.Doc(`
 		Compares the currently installed secdb-cli version against the latest
 		release published on GitHub.

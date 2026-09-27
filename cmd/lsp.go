@@ -12,8 +12,9 @@ import (
 var lspNoDiscovery bool
 
 var lspCmd = &cobra.Command{
-	Use:   "lsp",
-	Short: "Start the Language Server (LSP) for editor integration",
+	Use:     "lsp",
+	GroupID: groupIntegrations,
+	Short:   "Start the Language Server (LSP) for editor integration",
 	Long: heredoc.Doc(`
 		Start a Language Server Protocol (LSP) server that audits dependency
 		manifests against the ZEN SecDB as you open and edit them, reporting

@@ -8,8 +8,9 @@ import (
 )
 
 var ssvcCmd = &cobra.Command{
-	Use:   "ssvc",
-	Short: "SSVC (Stakeholder-Specific Vulnerability Categorization) tools",
+	Use:     "ssvc",
+	GroupID: groupIntel,
+	Short:   "SSVC (Stakeholder-Specific Vulnerability Categorization) tools",
 	Long: heredoc.Doc(`
 		Stakeholder-Specific Vulnerability Categorization (SSVC), per the CISA
 		methodology, combines a vulnerability's exploitation status and technical

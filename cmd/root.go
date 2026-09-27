@@ -34,6 +34,9 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "secdb",
 	Short: "CLI for ZEN SecDB",
+	// An error message (API failure, bad flag value, ...) is enough on its own;
+	// the full usage block would bury it.
+	SilenceUsage: true,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		apiKey = os.Getenv("SECDB_API_KEY")
 
@@ -45,6 +48,11 @@ var rootCmd = &cobra.Command{
 		case "json", "yaml", "text", "template", "html", "sarif", "csv":
 		default:
 			return fmt.Errorf("invalid --output: %s (want json|yaml|text|html|template|sarif|csv)", outputFormat)
+		}
+		// sarif/csv have the advisory shape only the audit subcommands produce, so
+		// reject them up front elsewhere instead of failing after the API call.
+		if (outputFormat == "sarif" || outputFormat == "csv") && cmd.Parent() != auditCmd {
+			return fmt.Errorf("--output=%s is only supported by the audit commands", outputFormat)
 		}
 
 		startBackgroundUpdateCheck(cmd)
@@ -75,7 +83,25 @@ func init() {
 
 	rootCmd.PersistentFlags().BoolVar(&debug, "debug", false,
 		"Enable debug logging to stderr")
+
+	// Help groups: each command sets its GroupID to one of these.
+	rootCmd.AddGroup(
+		&cobra.Group{ID: groupIntel, Title: "Vulnerability intelligence:"},
+		&cobra.Group{ID: groupAudit, Title: "Auditing:"},
+		&cobra.Group{ID: groupIntegrations, Title: "Integrations:"},
+		&cobra.Group{ID: groupOther, Title: "Other:"},
+	)
+	rootCmd.SetCompletionCommandGroupID(groupIntegrations)
+	rootCmd.SetHelpCommandGroupID(groupOther)
 }
+
+// Command group IDs for the root help (see rootCmd.AddGroup).
+const (
+	groupIntel        = "intel"
+	groupAudit        = "audit"
+	groupIntegrations = "integrations"
+	groupOther        = "other"
+)
 
 func startBackgroundUpdateCheck(cmd *cobra.Command) {
 	if cmd.Name() != "check-update" && os.Getenv("CI") == "" && os.Getenv("SECDB_NO_UPDATE_CHECK") == "" {

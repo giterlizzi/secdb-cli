@@ -16,8 +16,9 @@ import (
 )
 
 var cveCmd = &cobra.Command{
-	Use:   "cve <id>",
-	Short: "Fetch CVE info from ZEN SecDB",
+	Use:     "cve <id>",
+	GroupID: groupIntel,
+	Short:   "Fetch CVE info from ZEN SecDB",
 	Long: heredoc.Doc(`
 		This command allows you to fetch information about a specific CVE (Common
 		Vulnerabilities and Exposures) identifier from the ZEN SecDB.
