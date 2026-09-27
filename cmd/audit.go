@@ -27,6 +27,8 @@ var auditCmd = &cobra.Command{
 		    webhook  POSTs the result as JSON to SECDB_WEBHOOK_URL
 		    slack    posts a colored message to the Slack Incoming Webhook in
 		             SECDB_SLACK_WEBHOOK
+		    teams    posts an Adaptive Card to the Microsoft Teams (Power Automate
+		             Workflows) webhook in SECDB_TEAMS_WEBHOOK
 	`),
 }
 

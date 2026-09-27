@@ -8,7 +8,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
 	"github.com/giterlizzi/secdb-cli/internal/ci"
@@ -180,20 +179,12 @@ func renderAudit(cfg auditRenderConfig) error {
 
 func buildNotifyMessage(cfg auditRenderConfig, rep report.Report, overall string) notify.Message {
 	var findings []finding.Finding
-	counts := map[string]int{}
-
 	advisories, _ := rep.Results.([]audit.AdvisoryResult)
 	for _, adv := range advisories {
-		if adv.Ignored {
-			continue
-		}
-		for _, f := range adv.Findings() {
-			findings = append(findings, f)
-			counts[f.Severity]++
+		if !adv.Ignored {
+			findings = append(findings, adv.Findings()...)
 		}
 	}
-
-	total := len(findings)
 
 	// The Source/Target context rows live in cfg.meta (renderAudit prepends them
 	// to the text report), not in the GroupByAdvisory report passed as rep.
@@ -202,24 +193,10 @@ func buildNotifyMessage(cfg auditRenderConfig, rep report.Report, overall string
 		source = "audit"
 	}
 
-	var truncated int
-	if total > notify.MaxFindings {
-		truncated = total - notify.MaxFindings
-		findings = findings[:notify.MaxFindings]
-	}
-
-	return notify.Message{
-		Title:     fmt.Sprintf("SecDB audit: %s severity (%d findings)", overall, total),
-		Source:    source,
-		Overall:   overall,
-		Total:     total,
-		Counts:    counts,
-		Findings:  findings,
-		Truncated: truncated,
-		CI:        ci.Detect(),
-		BaseURL:   cfg.baseURL,
-		Time:      time.Now(),
-	}
+	msg := notify.NewMessage(source, overall, findings)
+	msg.CI = ci.Detect()
+	msg.BaseURL = cfg.baseURL
+	return msg
 }
 
 func sendNotifications(cfg auditRenderConfig, overall string) error {

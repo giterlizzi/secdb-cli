@@ -3,12 +3,6 @@
 package notify
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
-	"net/http"
-	"os"
 	"strconv"
 	"strings"
 )
@@ -26,33 +20,7 @@ type slack struct{}
 func (slack) Name() string { return "slack" }
 
 func (slack) Send(msg Message) error {
-	endpoint := os.Getenv(slackEnv)
-	if endpoint == "" {
-		return fmt.Errorf("%s not set", slackEnv)
-	}
-
-	body, err := json.Marshal(buildSlackMessage(msg))
-	if err != nil {
-		return fmt.Errorf("marshal payload: %w", err)
-	}
-
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
-	if err != nil {
-		return redactURL(err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := httpClient.Do(req)
-	if err != nil {
-		return redactURL(err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, resp.Body)
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("slack returned %s", resp.Status)
-	}
-	return nil
+	return postJSON("slack", slackEnv, buildSlackMessage(msg))
 }
 
 type slackMessage struct {
@@ -77,50 +45,23 @@ type slackField struct {
 
 // buildSlackMessage maps a Message to the Slack payload.
 func buildSlackMessage(msg Message) slackMessage {
-	// Deep link: prefer the CI run, fall back to the SecDB instance.
-	link := msg.CI.RunURL
-	if link == "" {
-		link = msg.BaseURL
-	}
-
 	// Per-severity counts as short fields, most severe first.
 	var fields []slackField
-	for _, sev := range severityOrder {
-		if n := msg.Counts[sev]; n > 0 {
-			fields = append(fields, slackField{
-				Title: strings.ToUpper(sev[:1]) + sev[1:],
-				Value: strconv.Itoa(n),
-				Short: true,
-			})
-		}
-	}
-
-	// A short list of the top findings (already capped to MaxFindings by the
-	// builder); note the overflow when present.
-	var lines []string
-	for _, f := range msg.Findings {
-		line := f.Name
-		if len(f.CVEs) > 0 {
-			line += " (" + strings.Join(f.CVEs, ", ") + ")"
-		}
-		if target := f.PURL; target != "" {
-			line += " - " + target
-		} else if f.Package != "" {
-			line += " - " + f.Package
-		}
-		lines = append(lines, line)
-	}
-	if msg.Truncated > 0 {
-		lines = append(lines, fmt.Sprintf("... and %d more", msg.Truncated))
+	for _, c := range severityCountsSorted(msg.Counts) {
+		fields = append(fields, slackField{
+			Title: c.Label,
+			Value: strconv.Itoa(c.Count),
+			Short: true,
+		})
 	}
 
 	return slackMessage{
 		Text: msg.Title,
 		Attachments: []slackAttachment{{
-			Color:     colorFor(msg.Overall),
-			Title:     fmt.Sprintf("%s (%d findings)", msg.Source, msg.Total),
-			TitleLink: link,
-			Text:      strings.Join(lines, "\n"),
+			Color:     severityColor[msg.Overall],
+			Title:     msg.summary(),
+			TitleLink: msg.detailsURL(),
+			Text:      strings.Join(msg.renderFindings(), "\n"),
 			Fields:    fields,
 			Fallback:  msg.Title,
 		}},

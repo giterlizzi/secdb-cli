@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // Package notify delivers an audit summary to one or more destinations (a
-// generic webhook today; Slack, Teams and email later). Providers are configured
-// from the environment (v1) and listed in a static registry, mirroring the
-// parser registry in internal/manifest: adding a provider is a new file plus an
-// entry in the registry slice, nothing else.
+// generic webhook, Slack and Microsoft Teams today; email later). Providers are
+// configured from the environment (v1) and listed in a static registry,
+// mirroring the parser registry in internal/manifest: adding a provider is a
+// new file plus an entry in the registry map, nothing else.
 package notify
 
 import (
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 )
 
-// Provider delivers a Message to one destination. Implementations are built from
-// environment configuration by their constructor in the registry.
+// Provider delivers a Message to one destination. Implementations are stateless
+// zero values registered in the registry; each reads its configuration from the
+// environment in Send.
 type Provider interface {
 	Name() string
 	Send(msg Message) error
@@ -26,16 +28,12 @@ type Provider interface {
 var registry = map[string]Provider{
 	"webhook": webhook{},
 	"slack":   slack{},
+	"teams":   teams{},
 }
 
 // Available returns the known provider names, sorted.
 func Available() []string {
-	names := make([]string, 0, len(registry))
-	for name := range registry {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
+	return slices.Sorted(maps.Keys(registry))
 }
 
 // Resolve selects the providers to notify. With no names it returns every known

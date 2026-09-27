@@ -29,12 +29,20 @@ type webhook struct{}
 func (webhook) Name() string { return "webhook" }
 
 func (webhook) Send(msg Message) error {
-	endpoint := os.Getenv(webhookEnv)
+	return postJSON("webhook", webhookEnv, msg)
+}
+
+// postJSON marshals payload and POSTs it as JSON to the endpoint URL held in the
+// given environment variable. It is the shared body of the HTTP providers
+// (webhook, slack, teams): name is used in the returned error, and any endpoint
+// URL is redacted so a secret-bearing webhook URL never reaches logs or stderr.
+func postJSON(name, envVar string, payload any) error {
+	endpoint := os.Getenv(envVar)
 	if endpoint == "" {
-		return fmt.Errorf("%s not set", webhookEnv)
+		return fmt.Errorf("%s not set", envVar)
 	}
 
-	body, err := json.Marshal(msg)
+	body, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
@@ -53,7 +61,7 @@ func (webhook) Send(msg Message) error {
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("webhook returned %s", resp.Status)
+		return fmt.Errorf("%s returned %s", name, resp.Status)
 	}
 	return nil
 }
