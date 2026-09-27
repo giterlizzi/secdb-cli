@@ -32,6 +32,9 @@ Pre-built binaries for Linux, macOS and Windows (amd64/arm64) are published on t
 | `SECDB_NO_UPDATE_CHECK` | Set to any value to disable the background update check                 |
 | `NO_COLOR`              | Print raw Markdown instead of ANSI-styled `text` output                 |
 | `CI`                    | Automatically disables the background update check when set             |
+| `SECDB_WEBHOOK_URL`     | Generic webhook endpoint for `--notify` (see [Send notifications](#send-notifications)) |
+| `SECDB_SLACK_WEBHOOK`   | Slack Incoming Webhook URL for `--notify`                               |
+| `SECDB_TEAMS_WEBHOOK`   | Microsoft Teams (Power Automate Workflows) webhook URL for `--notify`   |
 
 `--base-url` overrides the API endpoint (default: `https://secdb.nttzen.cloud/`).
 
@@ -97,8 +100,8 @@ command | secdb audit purl
 **Using CycloneDX SBOM file (JSON)**
 
 ```bash
-syft packages dir:. -o cyclonedx-json > bom.json && secdb audit purl --sbom bom.json
-cdxgen -o bom.json . && secdb audit purl --sbom bom.json
+syft packages dir:. -o cyclonedx-json > bom.json && secdb audit sbom --file bom.json
+cdxgen -o bom.json . && secdb audit sbom --file bom.json
 ```
 
 **CI**
@@ -106,21 +109,21 @@ cdxgen -o bom.json . && secdb audit purl --sbom bom.json
 Useful in CI pipelines to fail the build when high/critical vulnerabilities are found.
 
 ```bash
-secdb audit purl --sbom bom.json --fail-on=high
+secdb audit sbom --file bom.json --fail-on=high
 ```
 
 **SARIF report (e.g. for GitHub Code Scanning)**
 
 ```bash
-secdb audit purl --sbom bom.json --output=sarif > results.sarif
+secdb audit sbom --file bom.json --output=sarif > results.sarif
 ```
 
-Produces a [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) report - one rule/result per (advisory, affected package) pair, with severity, CVEs, CWEs and a CVSS-derived `security-severity` score. The artifact location in the report comes from `--sbom`, so pair `--output=sarif` with `--sbom` for a meaningful report; without `--sbom` the artifact location is left empty. A finding matched by `--ignore-file` is still included in the report, but carries a SARIF `suppressions` entry (`kind: external`, `status: accepted`, with the rule's `reason` as justification), so consumers like GitHub Code Scanning don't open a new alert for it.
+Produces a [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) report - one rule/result per (advisory, affected package) pair, with severity, CVEs, CWEs and a CVSS-derived `security-severity` score. The artifact location in the report is the audited file (`audit sbom`, `audit manifest`); a plain PURL list (`audit purl`) has no source file, so it is left empty. A finding matched by `--ignore-file` is still included in the report, but carries a SARIF `suppressions` entry (`kind: external`, `status: accepted`, with the rule's `reason` as justification), so consumers like GitHub Code Scanning don't open a new alert for it.
 
 **CSV report (for spreadsheets)**
 
 ```bash
-secdb audit purl --sbom bom.json --output=csv > report.csv
+secdb audit sbom --file bom.json --output=csv > report.csv
 ```
 
 Emits one row per advisory with the columns `ID, Title, Severity, CVSS, CVEs, CWEs, Packages, URL, Ignored, Ignore Reason`. The list columns (CVEs, CWEs, packages) are flattened into a single cell each, joined by `"; "`, and every text field is quoted per RFC 4180 so commas and quotes in titles/reasons don't break the columns. Like `sarif`, the `csv` output always uses the details shape (the `--view` flag doesn't affect it) and is only supported by the `audit` commands.
@@ -130,7 +133,7 @@ Emits one row per advisory with the columns `ID, Title, Severity, CVSS, CVEs, CW
 **Ignoring accepted-risk findings**
 
 ```bash
-secdb audit purl --sbom bom.json --fail-on=high --ignore-file=/path-of/.secdbignore
+secdb audit sbom --file bom.json --fail-on=high --ignore-file=/path-of/.secdbignore
 ```
 
 `--ignore-file` (default: `.secdbignore`) points to a YAML file of accepted-risk rules. A matching rule never hides a finding from the report; it only excludes it from the `--fail-on` exit-code check (and, for `--output=sarif`, marks the result as suppressed instead of removing it):
@@ -161,17 +164,17 @@ Unfixed: ⚠️ 98 hidden (run with --show-unfixed to list them)
 Pass `--show-unfixed` to include them; in the `details` view each such advisory is marked `Fix: ❌ No fix available for the affected package`.
 
 ```bash
-secdb audit purl --sbom bom.json --show-unfixed
+secdb audit sbom --file bom.json --show-unfixed
 ```
 
-The `--output=text` report (both `--view` modes) is preceded by a short metadata header: the input source (arguments / `--file` / stdin / `--sbom`) and the number of PURLs scanned. The header is text-only; it never appears in `json`/`yaml`/`sarif` output.
+The `--output=text` report (both `--view` modes) is preceded by a short metadata header: the input source (arguments / `--file` / stdin) and the number of PURLs scanned. The header is text-only; it never appears in `json`/`yaml`/`sarif` output.
 
-Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed as arguments, read from a file with `--file`/`-f` (one PURL per line, `#` for comments), from CycloneDX `--sbom` file, or piped via stdin.
+Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed as arguments, read from a file with `--file`/`-f` (one PURL per line, `#` for comments), or piped via stdin. For a CycloneDX SBOM use [`audit sbom`](#audit-a-cyclonedx-sbom).
 
 | Flag | Description |
 |---|---|
 | `-f`, `--file` | Read PURLs from a file instead of arguments/stdin |
-| `--sbom` | Read PURLs from CycloneDX SBOM file (JSON) instead of arguments/stdin/file |
+| `--sbom` | *(deprecated, use [`audit sbom --file`](#audit-a-cyclonedx-sbom))* Read PURLs from CycloneDX SBOM file (JSON) |
 | `-v`, `--view` | `summary` *(default)*, one row per package, or `details`, one row per advisory (only applies to `--output=text`) |
 | `--fail-on` | Exit with status `2` if any package has a vulnerability at or above the given severity (`critical`, `high`, `medium`, `low`, `info`) |
 | `--ignore-file` | YAML file of accepted-risk rules that exclude matching findings from `--fail-on` (default `.secdbignore`) |
@@ -295,7 +298,7 @@ A few files aren't recognized as a distinct language by every editor, so the ser
 
 ### Audit a CycloneDX SBOM
 
-Extract the PURLs from a CycloneDX BOM (JSON) and audit them against ZEN SecDB. This is a convenience front-end for [`audit purl --sbom`](#audit-purls-against-known-vulnerabilities): the two produce identical output.
+Extract the PURLs from a CycloneDX BOM (JSON) and audit them against ZEN SecDB. It supersedes the deprecated `audit purl --sbom` (still accepted, with the same output).
 
 ```bash
 secdb audit sbom --file bom.json
@@ -335,9 +338,12 @@ secdb audit linux
 
 ```bash
 secdb audit linux --host server.example.com --user ops
+
+# or the ssh:// URI shorthand (user, host and port in one argument)
+secdb audit linux ssh://ops@server.example.com:2222
 ```
 
-Uses your system `ssh` client, so `~/.ssh/config`, the SSH agent and `known_hosts` all apply (host-key checking stays enabled). Use `--port`, `--identity-file`, or `--ssh-config` to override.
+The `ssh://user@host:port` argument is a shorthand: the user, host and port it carries override the `--host`/`--user`/`--port` flags, while `--identity-file`/`--ssh-config`/`--sudo` still apply. Uses your system `ssh` client, so `~/.ssh/config`, the SSH agent and `known_hosts` all apply (host-key checking stays enabled).
 
 The command runs only fixed, read-only commands on the target: reading `/etc/os-release`, `uname -m`, and the distribution's package-list command (`dpkg-query` / `rpm` / `apk` / Slackware `/var/log/packages`). Supported distributions include Debian/Ubuntu, RHEL/Rocky Linux/AlmaLinux/Oracle Linux/Amazon Linux/Fedora/SUSE, Alpine Linux and Slackware Linux.
 
@@ -374,6 +380,69 @@ The same read-only collection, distribution support, and `--view` / `--fail-on` 
 | `--fail-on` | Exit with status `2` at or above the given severity |
 | `--ignore-file` | YAML file of accepted-risk rules (default `.secdbignore`) |
 | `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
+
+### Send notifications
+
+Every `audit` subcommand (`purl`, `manifest`, `sbom`, `linux`, `docker`) can push its result to one or more notification destinations with `--notify`. This is meant for CI: fail the build **and** post the findings to a chat channel or an automation endpoint in the same run.
+
+```bash
+# Post to Slack when the audit finds a high or critical vulnerability
+SECDB_SLACK_WEBHOOK=https://hooks.slack.com/services/... \
+  secdb audit sbom --file bom.json --notify --notify-on=high
+```
+
+Providers are configured entirely from the environment (a provider with no URL set is skipped, it is never an error):
+
+| Provider  | Environment variable  | Format |
+|-----------|-----------------------|--------|
+| `webhook` | `SECDB_WEBHOOK_URL`   | The [notification payload](#notification-payload) as JSON (for custom receivers and automation tools like n8n or Zapier) |
+| `slack`   | `SECDB_SLACK_WEBHOOK` | A colored [Slack Incoming Webhook](https://api.slack.com/messaging/webhooks) attachment |
+| `teams`   | `SECDB_TEAMS_WEBHOOK` | A Microsoft Teams [Adaptive Card](https://learn.microsoft.com/en-us/power-automate/create-flow-microsoft-teams-webhook) posted to a Power Automate **Workflows** webhook (the successor to the retired Office 365 connectors) |
+
+By default `--notify` sends to **every configured provider**. Use `--providers` to pick a subset (comma-separated), and `--notify-on` to set the minimum severity that triggers a notification.
+
+```bash
+# Only Slack, and only when a critical vulnerability is present
+secdb audit sbom --file bom.json --notify --providers=slack --notify-on=critical
+```
+
+| Flag | Description |
+|---|---|
+| `--notify` | Send the audit result to the configured notification providers |
+| `--providers` | Providers to notify (comma-separated: `webhook`, `slack`, `teams`); default: all configured |
+| `--notify-on` | Notify only when a vulnerability at or above this severity is found (`critical`, `high`, `medium`, `low`, `info`; default: `high`) |
+
+Delivery is **best-effort**: every selected provider is tried, failures are logged as warnings (with the endpoint URL redacted, so a secret-bearing webhook URL never reaches the logs), and a broken endpoint never fails the audit or blocks the other providers. The `--fail-on` exit code is unaffected by `--notify`.
+
+When the audit runs inside **GitHub Actions** or **GitLab CI**, the notification is automatically enriched with the pipeline context (repository, branch, commit, author) and its "view details" link points at the CI run; outside CI it points at the ZEN SecDB instance.
+
+#### Notification payload
+
+The `webhook` provider POSTs this JSON (the `slack`/`teams` providers render the same data into their own card format). The findings list is capped, with `truncated` reporting how many were omitted:
+
+```json
+{
+  "title": "SecDB audit: high severity (7 findings)",
+  "source": "SBOM (bom.json)",
+  "overall": "high",
+  "total": 7,
+  "counts": { "high": 2, "medium": 5 },
+  "findings": [
+    {
+      "source": "secdb-audit",
+      "source_id": "ZEN-...",
+      "name": "Advisory title",
+      "severity": "high",
+      "cves": ["CVE-2024-..."],
+      "purl": "pkg:maven/org.example/lib@1.2.3"
+    }
+  ],
+  "truncated": 0,
+  "ci": { "name": "github", "project": "org/repo", "run_url": "https://github.com/org/repo/actions/runs/..." },
+  "base_url": "https://secdb.nttzen.cloud/",
+  "time": "2026-09-26T10:00:00Z"
+}
+```
 
 ### Calculate SSVC
 
@@ -414,7 +483,7 @@ CVE identifiers can be passed as arguments, read from a file with `--file`/`-f` 
 ### Check for a new version
 
 ```bash
-secdb check-update   # alias: secdb update
+secdb check-update
 ```
 
 A lightweight background check also runs automatically on every command (cooldown: 24h, silent on failure, skipped in CI or with `SECDB_NO_UPDATE_CHECK` set).
