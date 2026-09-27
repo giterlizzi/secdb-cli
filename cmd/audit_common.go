@@ -43,8 +43,11 @@ type auditRenderConfig struct {
 	source     string
 }
 
-// addFlags register the shared flags
+// addFlags registers the shared audit flags on cmd, and validates them in its
+// PreRunE, so a bad value fails before any inventory or API call.
 func (o *auditOptions) addFlags(cmd *cobra.Command) {
+	cmd.PreRunE = func(*cobra.Command, []string) error { return o.validate() }
+
 	cmd.Flags().StringVarP(&o.view, "view", "v", "summary",
 		"View mode for audit results (summary, details)")
 	cmd.Flags().StringVar(&o.failOn, "fail-on", "",
@@ -60,6 +63,45 @@ func (o *auditOptions) addFlags(cmd *cobra.Command) {
 		"Notification providers to use (comma-separated); default: all configured")
 	cmd.Flags().StringVar(&o.notifyOn, "notify-on", "high",
 		"Notify only on a vulnerability at or above this severity (critical, high, medium, low, info)")
+}
+
+// validate checks the shared audit flags and normalizes the severities to
+// lowercase, so renderAudit can trust them. The notification flags are only
+// checked with --notify, as they are unused otherwise.
+func (o *auditOptions) validate() error {
+	if o.view != "summary" && o.view != "details" {
+		return fmt.Errorf("invalid --view option: %q (valid options: summary, details)", o.view)
+	}
+
+	if o.failOn != "" {
+		sev, err := parseSeverity("--fail-on", o.failOn)
+		if err != nil {
+			return err
+		}
+		o.failOn = sev
+	}
+
+	if o.notify {
+		sev, err := parseSeverity("--notify-on", o.notifyOn)
+		if err != nil {
+			return err
+		}
+		o.notifyOn = sev
+
+		if _, err := notify.Resolve(o.providers); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// parseSeverity lowercases a severity flag value and checks it is known.
+func parseSeverity(flag, value string) (string, error) {
+	sev := strings.ToLower(value)
+	if _, ok := audit.SeverityLevels[sev]; !ok {
+		return "", fmt.Errorf("invalid %s severity: %q (valid options: critical, high, medium, low, info)", flag, value)
+	}
+	return sev, nil
 }
 
 // runPackageAudit collects the OS/package inventory of the target, audits it
@@ -119,15 +161,12 @@ func renderAudit(cfg auditRenderConfig) error {
 
 	switch outputFormat {
 	case "text":
-		r := report.Report{}
-
-		switch cfg.opts.view {
-		case "summary":
-			r.Results = audit.SummarizePURLAudit(cfg.data, cfg.opts.showUnfixed)
-		case "details":
+		// --view is validated up front (auditOptions.validate): summary or details.
+		var r report.Report
+		if cfg.opts.view == "details" {
 			r = audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
-		default:
-			return fmt.Errorf("invalid --view option: %q (valid options: summary, details)", cfg.opts.view)
+		} else {
+			r.Results = audit.SummarizePURLAudit(cfg.data, cfg.opts.showUnfixed)
 		}
 
 		r.BaseURL = cfg.baseURL
@@ -160,17 +199,11 @@ func renderAudit(cfg auditRenderConfig) error {
 		}
 	}
 
-	if cfg.opts.failOn != "" {
-		threshold := strings.ToLower(cfg.opts.failOn)
-		if _, ok := audit.SeverityLevels[threshold]; !ok {
-			return fmt.Errorf("invalid --fail-on severity: %q (valid options: critical, high, medium, low, info)", cfg.opts.failOn)
-		}
-
-		if overall != "" {
-			if audit.SeverityLevels[overall] >= audit.SeverityLevels[threshold] {
-				fmt.Fprintf(os.Stderr, "audit failed: a package has a vulnerability with severity %q (fail-on=%q)\n", overall, cfg.opts.failOn)
-				os.Exit(2)
-			}
+	// --fail-on is validated and lowercased up front (auditOptions.validate).
+	if cfg.opts.failOn != "" && overall != "" {
+		if audit.SeverityLevels[overall] >= audit.SeverityLevels[cfg.opts.failOn] {
+			fmt.Fprintf(os.Stderr, "audit failed: a package has a vulnerability with severity %q (fail-on=%q)\n", overall, cfg.opts.failOn)
+			os.Exit(2)
 		}
 	}
 
@@ -200,12 +233,8 @@ func buildNotifyMessage(cfg auditRenderConfig, rep report.Report, overall string
 }
 
 func sendNotifications(cfg auditRenderConfig, overall string) error {
-	threshold := strings.ToLower(cfg.opts.notifyOn)
-	if _, ok := audit.SeverityLevels[threshold]; !ok {
-		return fmt.Errorf("invalid --notify-on severity: %q (valid options: critical, high, medium, low, info)", cfg.opts.notifyOn)
-	}
-
-	if overall == "" || audit.SeverityLevels[overall] < audit.SeverityLevels[threshold] {
+	// --notify-on and --providers are validated up front (auditOptions.validate).
+	if overall == "" || audit.SeverityLevels[overall] < audit.SeverityLevels[cfg.opts.notifyOn] {
 		return nil
 	}
 	providers, err := notify.Resolve(cfg.opts.providers)
