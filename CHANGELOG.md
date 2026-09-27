@@ -5,6 +5,58 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- Notifications for the audit commands: pass `--notify` to send a summary of the
+  results (overall severity, per-severity counts, up to 20 findings with a count
+  of the rest) to one or more providers, configured from the environment:
+  - `webhook`: the summary as JSON, POSTed to `SECDB_WEBHOOK_URL` (custom
+    receivers, n8n, Zapier, ...);
+  - `slack`: a colored attachment, posted to the Slack Incoming Webhook in
+    `SECDB_SLACK_WEBHOOK`;
+  - `teams`: an Adaptive Card, posted to the Microsoft Teams (Power Automate
+    Workflows) webhook in `SECDB_TEAMS_WEBHOOK`.
+
+  `--providers` picks which ones (default: all) and `--notify-on` sets the
+  minimum severity that triggers a notification (default: `high`). Delivery is
+  best-effort: a failing or unconfigured provider is reported as a warning and
+  never fails the command, and webhook URLs are redacted from every error.
+  Notifications are independent of `--fail-on`. In GitHub Actions and GitLab CI
+  the summary also carries the pipeline context (project, branch, commit, run
+  link), and the "view details" link points to the CI run.
+- `audit linux` accepts the SSH target as an argument, a shortcut for `--host`,
+  `--user` and `--port`: `ssh://[user@]host[:port]`, or the same without the
+  `ssh://` prefix (e.g. `secdb audit linux ops@server.example.com:2222`).
+
+### Changed
+
+- The audit flags (`--view`, `--fail-on`, `--notify-on`, `--providers`) are now
+  validated before any inventory collection or API call, so a typo fails fast
+  instead of after the report is printed.
+- `--output=sarif` and `--output=csv` are rejected up front outside the `audit`
+  commands (previously they failed only after the API call).
+- An error no longer prints the full command usage below it, so the message is
+  not buried.
+- The root help groups the commands by purpose (vulnerability intelligence,
+  auditing, integrations, other).
+
+### Deprecated
+
+- `audit purl --sbom`: use `audit sbom --file` instead. The flag still works,
+  prints a deprecation warning and is hidden from the help.
+
+### Removed
+
+- The `update` alias of `check-update` (it only checks for a new release, it
+  doesn't update) and the `v` alias of `version`.
+
+### Fixed
+
+- `--fail-on` was ignored with `--output=sarif` and `--output=csv`: the command
+  always exited with status `0`, even with findings at or above the threshold.
+
 ## [0.5.0] - 2026-09-17
 
 ### Added
