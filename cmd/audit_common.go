@@ -141,10 +141,14 @@ func renderAudit(cfg auditRenderConfig) error {
 		}
 	case "sarif":
 		r := audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
-		return output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), cfg.source, cfg.sources)
+		if err := output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), cfg.source, cfg.sources); err != nil {
+			return err
+		}
 	case "csv":
 		r := audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
-		return output.WriteCSV(os.Stdout, r, "audit-details-csv")
+		if err := output.WriteCSV(os.Stdout, r, "audit-details-csv"); err != nil {
+			return err
+		}
 	default:
 		if err := output.Render(os.Stdout, cfg.data, output.Format(outputFormat), newOutputOptions()); err != nil {
 			return fmt.Errorf("failed to render output: %w", err)
