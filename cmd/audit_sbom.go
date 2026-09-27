@@ -41,7 +41,7 @@ var sbomAuditCmd = &cobra.Command{
 		Extract the package URLs (PURLs) from a CycloneDX BOM (JSON) and audit
 		them against the ZEN SecDB for known vulnerabilities.
 
-		This is a convenience front-end for "audit purl --sbom": the PURLs are
+		It supersedes the deprecated "audit purl --sbom": the PURLs are
 		collected from the BOM's components (recursively), then shaped and
 		rendered exactly like "audit purl" (--view, --fail-on, --ignore-file,
 		--show-unfixed and --output=sarif/csv all behave the same way).

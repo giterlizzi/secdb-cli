@@ -35,18 +35,16 @@ var purlAuditCmd = &cobra.Command{
 		From pipe:
 			command | secdb audit purl
 
-		Using CycloneDX SBOM file (JSON):
-			syft packages dir:. -o cyclonedx-json > bom.json && secdb audit purl --sbom bom.json
-			cdxgen -o bom.json . && secdb audit purl --sbom bom.json
-
 		CI:
-			secdb audit purl --sbom bom.json --fail-on=high
+			secdb audit purl --file=purls.txt --fail-on=high
 
 		Notify a webhook on high-severity findings:
-			SECDB_WEBHOOK_URL=https://... secdb audit purl --sbom bom.json --notify --notify-on=high
+			SECDB_WEBHOOK_URL=https://... secdb audit purl --file=purls.txt --notify --notify-on=high
 
 		SARIF (e.g. for GitHub Code Scanning):
-			secdb audit purl --sbom bom.json --output=sarif > results.sarif
+			secdb audit purl --file=purls.txt --output=sarif > results.sarif
+
+		For a CycloneDX SBOM, use "secdb audit sbom --file bom.json".
 	`),
 	Short: "Audit PURLs against ZEN SecDB",
 	Long: heredoc.Doc(`
@@ -55,16 +53,17 @@ var purlAuditCmd = &cobra.Command{
 		check for known vulnerabilities and security issues.
 
 		You can provide PURLs directly as command-line arguments, read them from a
-		file using the --file flag, extract them from a CycloneDX BOM (JSON) using
-		the --sbom flag, or pipe them in via standard input.
+		file using the --file flag, or pipe them in via standard input. To audit a
+		CycloneDX BOM (JSON), use "secdb audit sbom" (the --sbom flag of this
+		command is deprecated).
 
 		If more than one input method is provided, only one is used, in this order
-		of precedence: --sbom, arguments, --file, standard input.
+		of precedence: arguments, --file, standard input.
 
 		Use --output=sarif to produce a SARIF 2.1.0 report suitable for GitHub Code
-		Scanning or other SARIF consumers. The artifact location in the report is
-		taken from --sbom, so pair --output=sarif with --sbom for a meaningful
-		report; without --sbom the artifact location is left empty. Findings matched
+		Scanning or other SARIF consumers. A plain PURL list has no source file, so
+		the artifact location in the report is left empty; "secdb audit sbom" and
+		"secdb audit manifest" set it to the audited file. Findings matched
 		by --ignore-file are still included in the report, but as a suppressed
 		result (kind: external, status: accepted) so SARIF consumers like GitHub
 		Code Scanning don't open a new alert for them.
@@ -98,7 +97,7 @@ var purlAuditCmd = &cobra.Command{
 		purls = audit.ValidatePURLs(util.Deduplicate(purls))
 
 		if len(purls) == 0 {
-			return errors.New("no PURLs provided: pass them as arguments, with --sbom, with --file, or via stdin")
+			return errors.New("no PURLs provided: pass them as arguments, with --file, or via stdin")
 		}
 
 		ignoreFile, err := audit.LoadIgnoreFile(purlOpts.ignoreFile)
@@ -135,6 +134,8 @@ func init() {
 		"Read PURL from file (one PURL per line) instead of arguments/stdin")
 	purlAuditCmd.Flags().StringVarP(&sbomFile, "sbom", "", "",
 		"Read PURLs from CycloneDX SBOM file (JSON) instead of arguments/stdin/file")
+	// Superseded by "audit sbom --file"; still accepted, hidden from the help.
+	_ = purlAuditCmd.Flags().MarkDeprecated("sbom", "use 'secdb audit sbom --file' instead")
 
 	purlOpts.addFlags(purlAuditCmd)
 }
