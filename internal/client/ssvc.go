@@ -2,32 +2,17 @@
 
 package client
 
-import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-)
+import "fmt"
 
 // SSVCBulk calculates SSVC decisions for the given CVEs in one request.
 func (c *Client) SSVCBulk(cveIDs []string, missionPrevalence string, publicWellBeingImpact string) ([]SSVCBulkResponse, error) {
-	payload, err := json.Marshal(ssvcBulkRequest{
+	data, err := postJSON[[]SSVCBulkResponse](c, "/api/v1/ssvc/bulk", ssvcBulkRequest{
 		CVEs:                  cveIDs,
 		MissionPrevalence:     missionPrevalence,
 		PublicWellBeingImpact: publicWellBeingImpact,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal JSON: %w", err)
-	}
-
-	res, err := c.post("/api/v1/ssvc/bulk", bytes.NewBuffer(payload))
-	if err != nil {
 		return nil, fmt.Errorf("failed to execute SSVC bulk request: %w", err)
 	}
-
-	var data []SSVCBulkResponse
-	if err := json.Unmarshal(res.Body, &data); err != nil {
-		return nil, fmt.Errorf("parse JSON: %w", err)
-	}
-
 	return data, nil
 }

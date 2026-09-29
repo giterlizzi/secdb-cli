@@ -3,7 +3,6 @@
 package client
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -15,15 +14,9 @@ func (c *Client) GetCVE(id string, expand ...string) (map[string]interface{}, er
 		path += "?expand=" + strings.Join(expand, ",")
 	}
 
-	res, err := c.get(path)
+	data, err := getJSON[map[string]interface{}](c, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CVE: %w", err)
 	}
-
-	var data map[string]interface{}
-	if err := json.Unmarshal(res.Body, &data); err != nil {
-		return nil, fmt.Errorf("parse JSON: %w", err)
-	}
-
 	return data, nil
 }

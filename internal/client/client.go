@@ -7,6 +7,8 @@
 package client
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -33,8 +35,20 @@ type Client struct {
 // Response holds a decoded API response.
 type Response struct {
 	Body   []byte
-	Header *http.Header
+	Header http.Header
 }
+
+// Errors returned for the API statuses a caller may want to handle; they are
+// wrapped by the endpoint methods, so match them with errors.Is.
+var (
+	ErrNotFound     = errors.New("not found")
+	ErrUnauthorized = errors.New("unauthorized (check SECDB_API_KEY)")
+	ErrRateLimited  = errors.New("rate limit exceeded")
+)
+
+// maxErrorBody caps how much of an unexpected response body is quoted in the
+// returned error, so e.g. a proxy's HTML error page doesn't flood the terminal.
+const maxErrorBody = 512
 
 // NewClient returns a Client with the default base URL and timeout.
 func NewClient() *Client {
@@ -93,7 +107,7 @@ func (c *Client) request(req *http.Request) (Response, error) {
 	defer func() { _ = res.Body.Close() }()
 
 	slog.Debug("response", "status", res.Status)
-	logRateLimit(&res.Header)
+	logRateLimit(res.Header)
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
@@ -103,18 +117,24 @@ func (c *Client) request(req *http.Request) (Response, error) {
 	switch res.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return Response{}, errors.New("not found")
+		return Response{}, ErrNotFound
 	case http.StatusUnauthorized:
-		return Response{}, errors.New("unauthorized")
+		return Response{}, ErrUnauthorized
 	case http.StatusTooManyRequests:
-		return Response{}, errors.New("rate-limit error")
+		if reset := res.Header.Get("RateLimit-Reset"); reset != "" {
+			return Response{}, fmt.Errorf("%w (retry in %ss)", ErrRateLimited, reset)
+		}
+		return Response{}, ErrRateLimited
 	default:
-		return Response{}, fmt.Errorf("API error (status %d): %s", res.StatusCode, string(body))
+		if len(body) > maxErrorBody {
+			body = append(body[:maxErrorBody], "..."...)
+		}
+		return Response{}, fmt.Errorf("API error (status %d): %s", res.StatusCode, body)
 	}
 
 	return Response{
 		Body:   body,
-		Header: &res.Header,
+		Header: res.Header,
 	}, nil
 }
 
@@ -136,8 +156,40 @@ func (c *Client) post(path string, body io.Reader) (Response, error) {
 	return c.request(req)
 }
 
-// logRateLimit, log the total remaining and used requests from RateLimit-* headers
-func logRateLimit(h *http.Header) {
+// getJSON GETs path and decodes the JSON response into T.
+func getJSON[T any](c *Client, path string) (T, error) {
+	res, err := c.get(path)
+	if err != nil {
+		var zero T
+		return zero, err
+	}
+	return decodeJSON[T](res)
+}
+
+// postJSON marshals in, POSTs it to path and decodes the JSON response into T.
+func postJSON[T any](c *Client, path string, in any) (T, error) {
+	var zero T
+	payload, err := json.Marshal(in)
+	if err != nil {
+		return zero, fmt.Errorf("marshal request: %w", err)
+	}
+	res, err := c.post(path, bytes.NewReader(payload))
+	if err != nil {
+		return zero, err
+	}
+	return decodeJSON[T](res)
+}
+
+func decodeJSON[T any](res Response) (T, error) {
+	var out T
+	if err := json.Unmarshal(res.Body, &out); err != nil {
+		return out, fmt.Errorf("parse JSON: %w", err)
+	}
+	return out, nil
+}
+
+// logRateLimit logs the used/remaining requests from the RateLimit-* headers.
+func logRateLimit(h http.Header) {
 
 	remaining := h.Get("RateLimit-Remaining")
 	limit := h.Get("RateLimit-Limit")
