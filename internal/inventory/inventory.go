@@ -37,6 +37,9 @@ func Collect(t Target) (*SystemInfo, error) {
 	if err := checkLocalSupported(t, runtime.GOOS); err != nil {
 		return nil, err
 	}
+	if err := checkDockerName(t); err != nil {
+		return nil, err
+	}
 
 	osr, err := collectOSRelease(t)
 	if err != nil {
@@ -73,6 +76,21 @@ func Collect(t Target) (*SystemInfo, error) {
 func checkLocalSupported(t Target, goos string) error {
 	if t.isLocal() && goos != "linux" {
 		return fmt.Errorf("local audit is only supported on Linux (this is %s); use a remote host or Docker target to audit a Linux system from %s", goos, goos)
+	}
+	return nil
+}
+
+// checkDockerName rejects a Docker image or container name starting with "-".
+// The name is a discrete argv element, so it can't inject shell commands, but
+// docker would still parse it as one of its own options (e.g.
+// --image=--privileged or --image=--volume=/:/host); no valid image or
+// container name starts with a dash.
+func checkDockerName(t Target) error {
+	if strings.HasPrefix(t.Image, "-") {
+		return fmt.Errorf("invalid --image %q: a Docker name can't start with \"-\"", t.Image)
+	}
+	if strings.HasPrefix(t.Container, "-") {
+		return fmt.Errorf("invalid --container %q: a Docker name can't start with \"-\"", t.Container)
 	}
 	return nil
 }

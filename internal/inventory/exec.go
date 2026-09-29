@@ -112,7 +112,9 @@ func dockerArgv(t Target, cmdStr string) []string {
 func (t Target) runArgv(name string, args ...string) (Result, error) {
 	var stdout, stderr bytes.Buffer
 
-	cmd := exec.Command(name, args...)
+	// name is always docker, /bin/sh or the ssh client (see the callers), never
+	// user input; args are discrete argv elements, never shell-interpolated.
+	cmd := exec.Command(name, args...) //nolint:gosec // G204: fixed program set, see above
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 

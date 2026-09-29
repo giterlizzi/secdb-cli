@@ -5,6 +5,7 @@ package lsp
 
 import (
 	"log/slog"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -384,11 +385,16 @@ func toRange(r manifest.Range) protocol.Range {
 	}
 }
 
+// fixLine converts a 1-based manifest line to a 0-based LSP line, clamped to
+// the uint32 range the protocol uses (0 when the line is unknown).
 func fixLine(n int) protocol.UInteger {
-	if n > 0 {
-		return protocol.UInteger(n - 1)
+	if n <= 0 {
+		return 0
 	}
-	return 0
+	if n-1 > math.MaxUint32 {
+		return math.MaxUint32
+	}
+	return protocol.UInteger(n - 1)
 }
 
 func publishDiagnostics(ctx *glsp.Context, uri protocol.DocumentUri, diags []protocol.Diagnostic) {

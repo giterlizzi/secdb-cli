@@ -47,13 +47,15 @@ func postJSON(name, envVar string, payload any) error {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body))
+	// endpoint is the operator's own webhook URL from the environment, not
+	// remote input, so the SSRF taint finding below doesn't apply.
+	req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(body)) //nolint:gosec // G704: operator-configured endpoint
 	if err != nil {
 		return redactURL(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := httpClient.Do(req)
+	resp, err := httpClient.Do(req) //nolint:gosec // G704: operator-configured endpoint, see above
 	if err != nil {
 		return redactURL(err)
 	}
