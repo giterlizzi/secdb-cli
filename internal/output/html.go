@@ -8,7 +8,7 @@ import (
 	"io"
 )
 
-func renderHTML(w io.Writer, data interface{}, opts Options) error {
+func renderHTML(w io.Writer, data any, opts Options) error {
 	src, err := templateSource(opts)
 	if err != nil {
 		return err

@@ -12,7 +12,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -141,7 +141,7 @@ func SupportedPatterns() []string {
 			}
 		}
 	}
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
@@ -175,7 +175,7 @@ func Discover(root string, skip map[string]bool, maxDepth int) ([]string, error)
 		}
 		return nil
 	})
-	sort.Strings(out)
+	slices.Sort(out)
 	return out, err
 }
 

@@ -19,11 +19,11 @@ type linuxAuditRequest struct {
 
 // AuditItem is one package and the advisories affecting it.
 type AuditItem struct {
-	Package    string                 `json:"package"`
-	PURL       string                 `json:"purl"`
-	Software   map[string]interface{} `json:"software,omitempty"`
-	CVEs       []string               `json:"cves"`
-	Advisories []Advisory             `json:"advisories"`
+	Package    string         `json:"package"`
+	PURL       string         `json:"purl"`
+	Software   map[string]any `json:"software,omitempty"`
+	CVEs       []string       `json:"cves"`
+	Advisories []Advisory     `json:"advisories"`
 }
 
 // Timestamp is a time.Time that decodes the API's timestamp format.

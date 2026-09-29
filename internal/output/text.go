@@ -22,7 +22,7 @@ var templatesFS embed.FS
 // (audit, ssvc) keep their natural width. Pass a width for prose-heavy,
 // table-free output (e.g. cve) so paragraphs and lists wrap with a correct
 // hanging indent instead of being pre-wrapped in the template.
-func RenderText(w io.Writer, data interface{}, templateName string, wrap ...int) error {
+func RenderText(w io.Writer, data any, templateName string, wrap ...int) error {
 	width := 0
 	if len(wrap) > 0 {
 		width = wrap[0]
@@ -46,7 +46,7 @@ func RenderText(w io.Writer, data interface{}, templateName string, wrap ...int)
 // RenderTextPlain executes the named embedded template directly to w,
 // without the Glamour Markdown pass. It is for machine-readable formats whose
 // layout lives entirely in a template (e.g. csv.tmpl).
-func RenderTextPlain(w io.Writer, data interface{}, name string) error {
+func RenderTextPlain(w io.Writer, data any, name string) error {
 	tmpl, err := template.New(name).Funcs(funcMap()).ParseFS(templatesFS, "templates/*.tmpl")
 	if err != nil {
 		return fmt.Errorf("embedded template %q: %w", name, err)

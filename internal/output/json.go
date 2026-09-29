@@ -8,7 +8,7 @@ import (
 	"io"
 )
 
-func renderJSON(w io.Writer, data interface{}) error {
+func renderJSON(w io.Writer, data any) error {
 	pretty, err := json.MarshalIndent(data, "", "  ")
 	if err != nil {
 		return fmt.Errorf("JSON encode: %w", err)

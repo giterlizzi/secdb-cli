@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func renderYAML(w io.Writer, data interface{}) error {
+func renderYAML(w io.Writer, data any) error {
 	out, err := yaml.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("YAML encode: %w", err)

@@ -4,11 +4,11 @@
 package audit
 
 import (
+	"cmp"
 	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -174,8 +174,9 @@ func SummarizePURLAudit(results []client.AuditItem, showUnfixed bool) []PackageR
 		cves := slices.Collect(maps.Keys(cveSeen))
 		cwes := slices.Collect(maps.Keys(cweSeen))
 
-		sort.Slice(cves, func(i, j int) bool { return cves[i] > cves[j] })
-		sort.Slice(cwes, func(i, j int) bool { return cwes[i] > cwes[j] })
+		// Descending, as before (e.g. newest CVE year first).
+		slices.SortFunc(cves, func(a, b string) int { return cmp.Compare(b, a) })
+		slices.SortFunc(cwes, func(a, b string) int { return cmp.Compare(b, a) })
 
 		out = append(out, PackageResult{
 			Package:       r.Package,
@@ -259,15 +260,12 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 
 	// Most severe first (then higher CVSS, then ID) so the details view leads
 	// with what matters; ties keep a stable, deterministic order.
-	sort.SliceStable(out, func(i, j int) bool {
-		si, sj := SeverityLevels[out[i].Severity], SeverityLevels[out[j].Severity]
-		if si != sj {
-			return si > sj
-		}
-		if out[i].CVSSScore != out[j].CVSSScore {
-			return out[i].CVSSScore > out[j].CVSSScore
-		}
-		return out[i].ID < out[j].ID
+	slices.SortStableFunc(out, func(a, b AdvisoryResult) int {
+		return cmp.Or(
+			cmp.Compare(SeverityLevels[b.Severity], SeverityLevels[a.Severity]),
+			cmp.Compare(b.CVSSScore, a.CVSSScore),
+			cmp.Compare(a.ID, b.ID),
+		)
 	})
 
 	rep.Results = out

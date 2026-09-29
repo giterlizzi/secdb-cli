@@ -3,8 +3,9 @@
 package manifest
 
 import (
+	"cmp"
 	"encoding/json"
-	"sort"
+	"slices"
 	"strings"
 
 	packageurl "github.com/package-url/packageurl-go"
@@ -172,5 +173,5 @@ func yarnNameFromHeader(header string) string {
 }
 
 func sortDeps(deps []Dependency) {
-	sort.Slice(deps, func(i, j int) bool { return deps[i].PURL < deps[j].PURL })
+	slices.SortFunc(deps, func(a, b Dependency) int { return cmp.Compare(a.PURL, b.PURL) })
 }

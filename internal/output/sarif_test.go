@@ -25,7 +25,7 @@ func TestWriteSARIF_Empty(t *testing.T) {
 					Name string `json:"name"`
 				} `json:"driver"`
 			} `json:"tool"`
-			Results []interface{} `json:"results"`
+			Results []any `json:"results"`
 		} `json:"runs"`
 	}
 

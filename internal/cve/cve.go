@@ -4,7 +4,8 @@
 package cve
 
 import (
-	"sort"
+	"cmp"
+	"slices"
 )
 
 type vendorCount struct {
@@ -14,8 +15,8 @@ type vendorCount struct {
 
 // SummarizeAffectedProducts enriches the raw CVE data map in place with
 // affected-vendor and affected/not-affected totals.
-func SummarizeAffectedProducts(data map[string]interface{}) {
-	raw, ok := data["affected_products"].([]interface{})
+func SummarizeAffectedProducts(data map[string]any) {
+	raw, ok := data["affected_products"].([]any)
 	if !ok {
 		return
 	}
@@ -24,7 +25,7 @@ func SummarizeAffectedProducts(data map[string]interface{}) {
 	var affectedTotal, notAffectedTotal int
 
 	for _, item := range raw {
-		entry, ok := item.(map[string]interface{})
+		entry, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
@@ -43,11 +44,9 @@ func SummarizeAffectedProducts(data map[string]interface{}) {
 	for vendor, count := range counts {
 		summary = append(summary, vendorCount{Vendor: vendor, Count: count})
 	}
-	sort.Slice(summary, func(i, j int) bool {
-		if summary[i].Count != summary[j].Count {
-			return summary[i].Count > summary[j].Count
-		}
-		return summary[i].Vendor < summary[j].Vendor
+	// Most affected products first, then by vendor name.
+	slices.SortFunc(summary, func(a, b vendorCount) int {
+		return cmp.Or(cmp.Compare(b.Count, a.Count), cmp.Compare(a.Vendor, b.Vendor))
 	})
 
 	data["affected_vendors_summary"] = summary

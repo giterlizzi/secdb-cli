@@ -19,7 +19,7 @@ type MetaItem struct {
 // the json/yaml/sarif paths keep rendering the raw API data unchanged.
 type Report struct {
 	Meta    []MetaItem
-	Results interface{}
+	Results any
 	BaseURL string // SecDB base URL
 }
 
@@ -36,7 +36,7 @@ func (r *Report) AddMeta(items ...MetaItem) {
 }
 
 // AddResults add report results
-func (r *Report) AddResults(results interface{}) {
+func (r *Report) AddResults(results any) {
 	r.Results = results
 }
 

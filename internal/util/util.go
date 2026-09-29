@@ -112,7 +112,7 @@ func readLines(r io.Reader) ([]string, error) {
 // Statusf writes an interactive progress message to stderr. It is a no-op when
 // stderr isn't a terminal (pipe, redirect, CI), so it never pollutes the
 // result on stdout nor clutters logs.
-func Statusf(format string, args ...interface{}) {
+func Statusf(format string, args ...any) {
 	if term.IsTerminal(int(os.Stderr.Fd())) {
 		fmt.Fprintf(os.Stderr, format, args...)
 	}

@@ -8,13 +8,13 @@ import (
 )
 
 // GetCVE fetches a CVE by ID, expanding the given related resources.
-func (c *Client) GetCVE(id string, expand ...string) (map[string]interface{}, error) {
+func (c *Client) GetCVE(id string, expand ...string) (map[string]any, error) {
 	path := "/api/v1/feed/cve/" + id
 	if len(expand) > 0 {
 		path += "?expand=" + strings.Join(expand, ",")
 	}
 
-	data, err := getJSON[map[string]interface{}](c, path)
+	data, err := getJSON[map[string]any](c, path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get CVE: %w", err)
 	}

@@ -59,7 +59,7 @@ func funcMap() template.FuncMap {
 }
 
 // Render writes data to w in the given format.
-func Render(w io.Writer, data interface{}, format Format, opts Options) error {
+func Render(w io.Writer, data any, format Format, opts Options) error {
 	switch format {
 	case JSON:
 		return renderJSON(w, data)
