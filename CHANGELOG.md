@@ -45,6 +45,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `medium` and `important` as `high` in every audit output (text, SARIF, CSV,
   notifications, `--fail-on`), so the same finding always has the same
   severity. `--fail-on` and `--notify-on` accept the aliases too.
+- `lsp` now follows the same rules as the audit commands: vulnerabilities with
+  no fix available are hidden (`--show-unfixed` to show them), and a finding
+  matched by the nearest `.secdbignore` (or `--ignore-file`) is reported as a
+  hint with the rule's reason instead of an error or warning.
+- `--fail-on` now ends the command through the regular error path: the
+  message is printed as `Error: audit failed: ...` and the update notice is no
+  longer skipped. The exit status is still `2`.
+- An ignore rule with an invalid `expires` date is now an error when the
+  ignore file is loaded, instead of a warning repeated for every advisory and
+  a rule silently dropped (which re-enabled the finding for `--fail-on`).
 - Clearer API errors: a `401` hints at `SECDB_API_KEY`, a `429` says when to
   retry, and an unexpected error response (e.g. a proxy's HTML page) is quoted
   only in part instead of flooding the terminal.
@@ -68,6 +78,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   advisory had no fix available, e.g. `lodash` because of `lodash.trim`, or
   `openssl` because of `edk2` on Debian. Only the audited package's own
   remediation status is considered now.
+- An ignore rule scoped to one package (`package.name`) could accept the whole
+  advisory, depending on which affected package came first: the SARIF report
+  then suppressed it for every package and notifications dropped it, while
+  `--fail-on` still counted the other packages. The rule now applies only to
+  the package it names, and the details view lists the packages it accepts.
+- An ignore rule's `expires` date was read as UTC midnight, so around midnight
+  a rule could stay active a few hours after its day ended (east of UTC, e.g.
+  until 02:00 in Italy in summer) or stop a few hours early (west of UTC). The
+  date now ends at midnight local time.
+
+### Security
+
+- `audit docker` rejects an `--image` or `--container` value starting with
+  `-`. The name was never passed through a shell, but docker would parse such
+  a value as one of its own options (e.g. `--image=--volume=/:/host`), which
+  matters when a pipeline takes the image name from untrusted input.
 
 ## [0.5.0] - 2026-09-17
 
