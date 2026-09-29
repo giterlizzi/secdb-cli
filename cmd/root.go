@@ -4,6 +4,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -161,12 +162,28 @@ func newOutputOptions() output.Options {
 	}
 }
 
-// Execute runs the root command and exits non-zero on error.
+// exitError is returned by a command that must end with a specific exit
+// status (e.g. --fail-on → 2) after writing its output. Commands return it
+// instead of calling os.Exit, so Execute still prints the update notice, and a
+// test can check the status.
+type exitError struct {
+	code int
+	msg  string
+}
+
+func (e *exitError) Error() string { return e.msg }
+
+// Execute runs the root command and exits non-zero on error: with the
+// exitError's code when a command returned one, 1 otherwise.
 func Execute() {
 	err := rootCmd.Execute()
 	printUpdateNoticeIfReady()
 
-	if err != nil {
-		os.Exit(1)
+	if err == nil {
+		return
 	}
+	if e, ok := errors.AsType[*exitError](err); ok {
+		os.Exit(e.code)
+	}
+	os.Exit(1)
 }

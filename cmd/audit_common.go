@@ -224,8 +224,10 @@ func renderAudit(cfg auditRenderConfig) error {
 	// --fail-on is validated and lowercased up front (auditOptions.validate).
 	if cfg.opts.failOn != "" && overall != "" {
 		if audit.SeverityLevels[overall] >= audit.SeverityLevels[cfg.opts.failOn] {
-			fmt.Fprintf(os.Stderr, "audit failed: a package has a vulnerability with severity %q (fail-on=%q)\n", overall, cfg.opts.failOn)
-			os.Exit(2)
+			return &exitError{
+				code: 2,
+				msg:  fmt.Sprintf("audit failed: a package has a vulnerability with severity %q (fail-on=%q)", overall, cfg.opts.failOn),
+			}
 		}
 	}
 
@@ -236,8 +238,11 @@ func buildNotifyMessage(cfg auditRenderConfig, rep report.Report, overall string
 	var findings []finding.Finding
 	advisories, _ := rep.Results.([]audit.AdvisoryResult)
 	for _, adv := range advisories {
-		if !adv.Ignored {
-			findings = append(findings, adv.Findings()...)
+		for _, f := range adv.Findings() {
+			// Skip only the packages an ignore rule accepts, not the whole advisory.
+			if ignored, _ := adv.IgnoredFor(f.PURL); !ignored {
+				findings = append(findings, f)
+			}
 		}
 	}
 
