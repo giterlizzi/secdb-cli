@@ -29,17 +29,19 @@ type auditOptions struct {
 	notify      bool
 	providers   []string
 	notifyOn    string
+
+	// ignore is the parsed --ignore-file, loaded by validate.
+	ignore *audit.IgnoreFile
 }
 
 type auditRenderConfig struct {
-	data       []client.AuditItem
-	opts       *auditOptions
-	ignoreFile *audit.IgnoreFile
-	baseURL    string
-	meta       []report.MetaItem
-	template   string
-	sources    map[string]output.SourceLocation
-	source     string
+	data     []client.AuditItem
+	opts     *auditOptions
+	baseURL  string
+	meta     []report.MetaItem
+	template string
+	sources  map[string]output.SourceLocation
+	source   string
 }
 
 // addFlags registers the shared audit flags on cmd, and validates them in its
@@ -64,9 +66,11 @@ func (o *auditOptions) addFlags(cmd *cobra.Command) {
 		"Notify only on a vulnerability at or above this severity (critical, high, medium, low, info)")
 }
 
-// validate checks the shared audit flags and normalizes the severities to
-// lowercase, so renderAudit can trust them. The notification flags are only
-// checked with --notify, as they are unused otherwise.
+// validate checks the shared audit flags, normalizes the severities and loads
+// the --ignore-file, so renderAudit can trust them and a malformed ignore file
+// fails before any inventory collection (SSH, Docker) or API call. The
+// notification flags are only checked with --notify, as they are unused
+// otherwise.
 func (o *auditOptions) validate() error {
 	if o.view != "summary" && o.view != "details" {
 		return fmt.Errorf("invalid --view option: %q (valid options: summary, details)", o.view)
@@ -91,6 +95,12 @@ func (o *auditOptions) validate() error {
 			return err
 		}
 	}
+
+	ignore, err := audit.LoadIgnoreFile(o.ignoreFile)
+	if err != nil {
+		return err
+	}
+	o.ignore = ignore
 	return nil
 }
 
@@ -114,11 +124,6 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 		return err
 	}
 
-	ignoreFile, err := audit.LoadIgnoreFile(opts.ignoreFile)
-	if err != nil {
-		return err
-	}
-
 	util.Statusf("Detected %s %s %s (%d packages)\n", info.OS, info.Version, info.Arch, len(info.Packages))
 	util.Statusf("Auditing %d packages against ZEN SecDB...\n", len(info.Packages))
 
@@ -129,12 +134,11 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 	}
 
 	return renderAudit(auditRenderConfig{
-		data:       data,
-		opts:       opts,
-		ignoreFile: ignoreFile,
-		baseURL:    client.BaseURL(),
-		template:   "audit-linux",
-		source:     fmt.Sprintf("%s/%s", info.OS, info.Version),
+		data:     data,
+		opts:     opts,
+		baseURL:  client.BaseURL(),
+		template: "audit-linux",
+		source:   fmt.Sprintf("%s/%s", info.OS, info.Version),
 		meta: []report.MetaItem{
 			{Label: "Target", Value: target.Describe()},
 			{Label: "OS", Value: fmt.Sprintf("%s %s", info.OS, info.Version)},
@@ -144,10 +148,28 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 	})
 }
 
+// runPURLAudit audits purls against ZEN SecDB and renders the result with the
+// audit-purl templates. It is the shared tail of the audit purl, sbom and
+// manifest commands: cfg carries only what differs between them (meta rows,
+// SARIF source/sources), runPURLAudit fills in the rest.
+func runPURLAudit(purls []string, opts *auditOptions, cfg auditRenderConfig) error {
+	client := newSecDbClient()
+	data, err := client.PURLAudit(purls)
+	if err != nil {
+		return err
+	}
+
+	cfg.data = data
+	cfg.opts = opts
+	cfg.baseURL = client.BaseURL()
+	cfg.template = "audit-purl"
+	return renderAudit(cfg)
+}
+
 func renderAudit(cfg auditRenderConfig) error {
 	meta := cfg.meta
 
-	overall := audit.OverallSeverity(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
+	overall := audit.OverallSeverity(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
 
 	// display a warning in "text" output
 	if !cfg.opts.showUnfixed {
@@ -164,7 +186,7 @@ func renderAudit(cfg auditRenderConfig) error {
 		// --view is validated up front (auditOptions.validate): summary or details.
 		var r report.Report
 		if cfg.opts.view == "details" {
-			r = audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
+			r = audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
 		} else {
 			r.Results = audit.SummarizePURLAudit(cfg.data, cfg.opts.showUnfixed)
 		}
@@ -178,12 +200,12 @@ func renderAudit(cfg auditRenderConfig) error {
 			return fmt.Errorf("failed to render details: %w", err)
 		}
 	case "sarif":
-		r := audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
+		r := audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
 		if err := output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), cfg.source, cfg.sources); err != nil {
 			return err
 		}
 	case "csv":
-		r := audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
+		r := audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
 		if err := output.WriteCSV(os.Stdout, r, "audit-details-csv"); err != nil {
 			return err
 		}
@@ -241,7 +263,7 @@ func sendNotifications(cfg auditRenderConfig, overall string) error {
 	if err != nil {
 		return err
 	}
-	rep := audit.GroupByAdvisory(cfg.data, cfg.ignoreFile, cfg.opts.showUnfixed)
+	rep := audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
 	msg := buildNotifyMessage(cfg, rep, overall)
 	for _, e := range notify.Send(providers, msg) {
 		slog.Warn("notification failed", "error", e)

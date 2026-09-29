@@ -52,29 +52,13 @@ var sbomAuditCmd = &cobra.Command{
 			return err
 		}
 
-		purls = audit.ValidatePURLs(util.Deduplicate(purls))
+		purls = util.Deduplicate(audit.ValidatePURLs(purls))
 		if len(purls) == 0 {
 			return fmt.Errorf("no PURLs found in %s", sbomAuditFile)
 		}
 
-		ignoreFile, err := audit.LoadIgnoreFile(sbomOpts.ignoreFile)
-		if err != nil {
-			return err
-		}
-
-		client := newSecDbClient()
-		data, err := client.PURLAudit(purls)
-		if err != nil {
-			return err
-		}
-
-		return renderAudit(auditRenderConfig{
-			data:       data,
-			opts:       &sbomOpts,
-			ignoreFile: ignoreFile,
-			baseURL:    client.BaseURL(),
-			template:   "audit-purl",
-			source:     sbomAuditFile,
+		return runPURLAudit(purls, &sbomOpts, auditRenderConfig{
+			source: sbomAuditFile,
 			meta: []report.MetaItem{
 				{Label: "Source", Value: "SBOM (" + sbomAuditFile + ")"},
 				{Label: "PURLs scanned", Value: strconv.Itoa(len(purls))},

@@ -94,36 +94,18 @@ var purlAuditCmd = &cobra.Command{
 			return err
 		}
 
-		purls = audit.ValidatePURLs(util.Deduplicate(purls))
-
+		purls = util.Deduplicate(audit.ValidatePURLs(purls))
 		if len(purls) == 0 {
 			return errors.New("no PURLs provided: pass them as arguments, with --file, or via stdin")
 		}
 
-		ignoreFile, err := audit.LoadIgnoreFile(purlOpts.ignoreFile)
-		if err != nil {
-			return err
-		}
-
-		client := newSecDbClient()
-		data, err := client.PURLAudit(purls)
-		if err != nil {
-			return err
-		}
-
-		return renderAudit(auditRenderConfig{
-			data:       data,
-			opts:       &purlOpts,
-			ignoreFile: ignoreFile,
-			baseURL:    client.BaseURL(),
-			template:   "audit-purl",
-			source:     sbomFile,
+		return runPURLAudit(purls, &purlOpts, auditRenderConfig{
+			source: sbomFile,
 			meta: []report.MetaItem{
 				{Label: "Source", Value: source},
 				{Label: "PURLs scanned", Value: strconv.Itoa(len(purls))},
 			},
 		})
-
 	},
 }
 

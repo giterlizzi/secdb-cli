@@ -126,24 +126,8 @@ var manifestAuditCmd = &cobra.Command{
 			return fmt.Errorf("no auditable dependencies found in %s", source)
 		}
 
-		ignoreFile, err := audit.LoadIgnoreFile(manifestOpts.ignoreFile)
-		if err != nil {
-			return err
-		}
-
-		client := newSecDbClient()
-		data, err := client.PURLAudit(purls)
-		if err != nil {
-			return err
-		}
-
-		return renderAudit(auditRenderConfig{
-			data:       data,
-			opts:       &manifestOpts,
-			ignoreFile: ignoreFile,
-			baseURL:    client.BaseURL(),
-			template:   "audit-purl",
-			sources:    sources,
+		return runPURLAudit(purls, &manifestOpts, auditRenderConfig{
+			sources: sources,
 			meta: []report.MetaItem{
 				{Label: "Source", Value: fmt.Sprintf("manifest (%s)", source)},
 				{Label: "Dependencies scanned", Value: strconv.Itoa(len(purls))},
