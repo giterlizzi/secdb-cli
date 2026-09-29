@@ -148,10 +148,10 @@ ignore:
     package:
       name: some-package
       version: 1.0.0    # optional: without it, the rule matches every version of the package
-    expires: 2026-12-31 # optional: rule stops applying after this date (inclusive)
+    expires: 2026-12-31 # optional: rule stops applying after this date (inclusive, local time)
 ```
 
-A rule matches on `vulnerability` (advisory ID or CVE) and, optionally, narrows to a specific `package.name`/`package.version`. It's a no-op if the audit result doesn't already have a matching, non-expired rule.
+A rule matches on `vulnerability` (advisory ID or CVE) and, optionally, narrows to a specific `package.name`/`package.version`. It's a no-op if the audit result doesn't already have a matching, non-expired rule. An `expires` value that isn't a valid `YYYY-MM-DD` date is an error: the command stops instead of silently dropping the rule.
 
 **Showing vulnerabilities with no available fix**
 
@@ -229,6 +229,14 @@ Support for more manifest formats can be added over time.
 The server speaks JSON-RPC over stdin/stdout and is meant to be launched by an editor's LSP client, not run by hand (in a plain terminal it just waits for input). It debounces edits, so it audits shortly after you stop typing rather than on every keystroke. Set `SECDB_DEBUG=1` (or pass `--debug`) to log to stderr.
 
 On startup the server also **discovers and audits every supported manifest in the workspace**, so findings show up without opening each file (noise directories like `node_modules`, `vendor`, `target`, `dist`, `build` and `testdata` are skipped, and symlinks aren't followed). Discovery skips files you already have open (they're kept fresh by the edit path) and audits the rest sequentially. Pass `--no-discovery` to audit only files as they are opened.
+
+Findings follow the same rules as the `audit` commands. Vulnerabilities with no fix available are hidden unless you pass `--show-unfixed`. A finding matched by an ignore rule is still reported, as a **hint** that carries the rule's reason (e.g. `(ignored: not reachable)`), rather than an error or a warning. The ignore file is the nearest `.secdbignore` from the manifest's directory up to the workspace root, or the file given with `--ignore-file`; it's re-read on every audit, so an edited rule applies on the next one.
+
+| Flag | Description |
+|---|---|
+| `--no-discovery` | Don't audit the whole workspace on startup, only the files you open |
+| `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
+| `--ignore-file` | YAML file of accepted-risk rules (default: the nearest `.secdbignore` up to the workspace root) |
 
 <details>
 <summary><strong>Kate</strong> (Settings &gt; LSP Client &gt; User Server Settings)</summary>
