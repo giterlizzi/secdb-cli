@@ -41,6 +41,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not buried.
 - The root help groups the commands by purpose (vulnerability intelligence,
   auditing, integrations, other).
+- Severity aliases used by the feeds are normalized: `moderate` is reported as
+  `medium` and `important` as `high` in every audit output (text, SARIF, CSV,
+  notifications, `--fail-on`), so the same finding always has the same
+  severity. `--fail-on` and `--notify-on` accept the aliases too.
+- Clearer API errors: a `401` hints at `SECDB_API_KEY`, a `429` says when to
+  retry, and an unexpected error response (e.g. a proxy's HTML page) is quoted
+  only in part instead of flooding the terminal.
 
 ### Deprecated
 
@@ -56,6 +63,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `--fail-on` was ignored with `--output=sarif` and `--output=csv`: the command
   always exited with status `0`, even with findings at or above the threshold.
+- A vulnerability that has a fix could be hidden as "unfixed" (and so excluded
+  from the report and from `--fail-on`) when another package listed in the same
+  advisory had no fix available, e.g. `lodash` because of `lodash.trim`, or
+  `openssl` because of `edk2` on Debian. Only the audited package's own
+  remediation status is considered now.
 
 ## [0.5.0] - 2026-09-17
 
