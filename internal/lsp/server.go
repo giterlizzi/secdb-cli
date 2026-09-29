@@ -318,10 +318,10 @@ func publishDiagnostics(ctx *glsp.Context, uri protocol.DocumentUri, diags []pro
 func toDiagnosticSeverity(severity string) *protocol.DiagnosticSeverity {
 	var s protocol.DiagnosticSeverity
 
-	switch strings.ToLower(severity) {
-	case "critical", "important", "urgent", "severe", "high":
+	switch audit.NormalizeSeverity(severity) {
+	case "critical", "high":
 		s = protocol.DiagnosticSeverityError
-	case "medium", "moderate":
+	case "medium":
 		s = protocol.DiagnosticSeverityWarning
 	case "low":
 		s = protocol.DiagnosticSeverityInformation

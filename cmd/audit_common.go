@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
-	"strings"
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
 	"github.com/giterlizzi/secdb-cli/internal/ci"
@@ -95,10 +94,11 @@ func (o *auditOptions) validate() error {
 	return nil
 }
 
-// parseSeverity lowercases a severity flag value and checks it is known.
+// parseSeverity normalizes a severity flag value (so an alias like "moderate"
+// is accepted) and checks it is known.
 func parseSeverity(flag, value string) (string, error) {
-	sev := strings.ToLower(value)
-	if _, ok := audit.SeverityLevels[sev]; !ok {
+	sev := audit.NormalizeSeverity(value)
+	if _, ok := audit.SeverityLevels[sev]; !ok || sev == "" {
 		return "", fmt.Errorf("invalid %s severity: %q (valid options: critical, high, medium, low, info)", flag, value)
 	}
 	return sev, nil

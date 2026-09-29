@@ -43,9 +43,32 @@ type AdvisoryResult struct {
 	Unfixed      bool
 }
 
-// SeverityLevels ranks severities so they can be compared and sorted.
+// SeverityLevels ranks the canonical severities (see NormalizeSeverity) so they
+// can be compared and sorted; "" (no severity) ranks lowest.
 var SeverityLevels = map[string]int{
-	"critical": 5, "high": 4, "medium": 3, "moderate": 3, "low": 2, "info": 1, "unknown": 1, "": 0,
+	"critical": 5, "high": 4, "medium": 3, "low": 2, "info": 1, "": 0,
+}
+
+// severityAliases maps the vendor-specific severity names the feeds use (e.g.
+// GitHub/Red Hat/SUSE "moderate", Red Hat "important") to a canonical one.
+var severityAliases = map[string]string{
+	"moderate":  "medium",
+	"important": "high",
+	"urgent":    "high",
+	"severe":    "high",
+	"unknown":   "info",
+}
+
+// NormalizeSeverity lowercases a severity and maps its aliases to one of the
+// canonical values ranked by SeverityLevels, so every consumer (fail-on,
+// notifications, SARIF, templates) sees the same vocabulary. An unrecognized
+// value is returned lowercased and ranks like "" (no severity).
+func NormalizeSeverity(severity string) string {
+	s := strings.ToLower(strings.TrimSpace(severity))
+	if alias, ok := severityAliases[s]; ok {
+		return alias
+	}
+	return s
 }
 
 // hideUnfixed reports whether adv must be hidden from the audit output for
@@ -99,7 +122,7 @@ func OverallSeverity(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 				continue
 			}
 
-			severity := strings.ToLower(adv.Severity)
+			severity := NormalizeSeverity(adv.Severity)
 			if SeverityLevels[severity] > SeverityLevels[maxSeverity] {
 				maxSeverity = severity
 			}
@@ -126,7 +149,7 @@ func SummarizePURLAudit(results []client.AuditItem, showUnfixed bool) []PackageR
 
 			advisoryCount++
 
-			severity := strings.ToLower(adv.Severity)
+			severity := NormalizeSeverity(adv.Severity)
 			if SeverityLevels[severity] > SeverityLevels[maxSeverity] {
 				maxSeverity = severity
 			}
@@ -194,7 +217,7 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 					Summary:      adv.Summary,
 					Description:  adv.Description,
 					URL:          adv.URL,
-					Severity:     strings.ToLower(adv.Severity),
+					Severity:     NormalizeSeverity(adv.Severity),
 					CVEs:         adv.CVEs,
 					CWEs:         cweIDs(adv),
 					CVSSScore:    latestCVSSScore(adv),
