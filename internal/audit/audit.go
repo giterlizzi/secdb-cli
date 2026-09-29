@@ -4,6 +4,7 @@
 package audit
 
 import (
+	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
@@ -40,6 +41,7 @@ type AdvisoryResult struct {
 	URL          string
 	Ignored      bool
 	IgnoreReason string
+	IgnoredPURLs map[string]string
 	Unfixed      bool
 }
 
@@ -191,7 +193,6 @@ func SummarizePURLAudit(results []client.AuditItem, showUnfixed bool) []PackageR
 func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnfixed bool) report.Report {
 	byID := make(map[string]*AdvisoryResult)
 	var order []string
-	var ignoredCount int
 
 	rep := report.Report{}
 
@@ -205,42 +206,55 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 			}
 
 			if _, exists := byID[adv.ID]; !exists {
-				ignored, reason := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.PURL)
-
-				if ignored {
-					ignoredCount++
-				}
-
 				byID[adv.ID] = &AdvisoryResult{
-					ID:           adv.ID,
-					Title:        adv.Title,
-					Summary:      adv.Summary,
-					Description:  adv.Description,
-					URL:          adv.URL,
-					Severity:     NormalizeSeverity(adv.Severity),
-					CVEs:         adv.CVEs,
-					CWEs:         cweIDs(adv),
-					CVSSScore:    latestCVSSScore(adv),
-					Ignored:      ignored,
-					IgnoreReason: reason,
-					Unfixed:      unfixed,
+					ID:          adv.ID,
+					Title:       adv.Title,
+					Summary:     adv.Summary,
+					Description: adv.Description,
+					URL:         adv.URL,
+					Severity:    NormalizeSeverity(adv.Severity),
+					CVEs:        adv.CVEs,
+					CWEs:        cweIDs(adv),
+					CVSSScore:   latestCVSSScore(adv),
+					Unfixed:     unfixed,
 				}
 
 				order = append(order, adv.ID)
 			}
 
-			byID[adv.ID].Packages = append(byID[adv.ID].Packages, r.Package)
-			byID[adv.ID].PURLs = append(byID[adv.ID].PURLs, r.PURL)
+			res := byID[adv.ID]
+			res.Packages = append(res.Packages, r.Package)
+			res.PURLs = append(res.PURLs, r.PURL)
 
 			if unfixed {
-				byID[adv.ID].Unfixed = true
+				res.Unfixed = true
+			}
+
+			// Evaluated per package, like OverallSeverity: a rule scoped to one
+			// package must not accept the advisory for the others.
+			if ignored, reason := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.PURL); ignored {
+				if res.IgnoredPURLs == nil {
+					res.IgnoredPURLs = make(map[string]string)
+				}
+				res.IgnoredPURLs[r.PURL] = reason
 			}
 		}
 	}
 
+	var ignoredCount, partiallyIgnored int
 	out := make([]AdvisoryResult, 0, len(order))
 	for _, id := range order {
-		out = append(out, *byID[id])
+		res := byID[id]
+		switch {
+		case len(res.IgnoredPURLs) == 0:
+		case res.ignoredForAll():
+			res.Ignored = true
+			res.IgnoreReason = res.IgnoredPURLs[res.PURLs[0]]
+			ignoredCount++
+		default:
+			partiallyIgnored++
+		}
+		out = append(out, *res)
 	}
 
 	// Most severe first (then higher CVSS, then ID) so the details view leads
@@ -258,11 +272,41 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 
 	rep.Results = out
 
-	if ignoredCount > 0 {
-		rep.AddMeta(report.MetaItem{Label: "Ignored", Value: strconv.Itoa(ignoredCount)})
+	if ignoredCount > 0 || partiallyIgnored > 0 {
+		value := strconv.Itoa(ignoredCount)
+		switch {
+		case partiallyIgnored > 0 && ignoredCount == 0:
+			value = fmt.Sprintf("%d for some packages only", partiallyIgnored)
+		case partiallyIgnored > 0:
+			value += fmt.Sprintf(" (+%d for some packages only)", partiallyIgnored)
+		}
+		rep.AddMeta(report.MetaItem{Label: "Ignored", Value: value})
 	}
 
 	return rep
+}
+
+// IgnoredFor reports whether an ignore rule accepts the advisory for purl, and
+// the rule's reason. A result built with Ignored but no per-package matches
+// (e.g. by hand) counts as ignored for every package.
+func (a AdvisoryResult) IgnoredFor(purl string) (bool, string) {
+	if reason, ok := a.IgnoredPURLs[purl]; ok {
+		return true, reason
+	}
+	if a.Ignored {
+		return true, a.IgnoreReason
+	}
+	return false, ""
+}
+
+// ignoredForAll reports whether every affected package has an ignore match.
+func (a AdvisoryResult) ignoredForAll() bool {
+	for _, purl := range a.PURLs {
+		if _, ok := a.IgnoredPURLs[purl]; !ok {
+			return false
+		}
+	}
+	return len(a.PURLs) > 0
 }
 
 // UnfixedCount returns how many advisories are hidden because no fix is

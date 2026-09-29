@@ -30,6 +30,11 @@
 - **ZEN SecDB:** <{{ advisory_url $baseURL .ID }}>
 {{- if .Ignored}}
 - **Ignored:** ⚠️ {{.IgnoreReason}}
+{{- else if .IgnoredPURLs}}
+- **Ignored for:**
+{{- range $purl, $reason := .IgnoredPURLs}}
+  - {{$purl}}: ⚠️ {{$reason}}
+{{- end}}
 {{- end}}
 {{- else}}
 

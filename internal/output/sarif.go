@@ -71,8 +71,8 @@ func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile strin
 				"primaryLocationLineHash": buildFingerprint(file, adv.ID, purl),
 			})
 
-			if adv.Ignored {
-				result.AddSuppression(buildSuppression(adv))
+			if ignored, reason := adv.IgnoredFor(purl); ignored {
+				result.AddSuppression(buildSuppression(reason))
 			}
 
 		}
@@ -83,8 +83,7 @@ func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile strin
 	return sarifReport.PrettyWrite(w)
 }
 
-func buildSuppression(advisory audit.AdvisoryResult) *sarif.Suppression {
-	justification := advisory.IgnoreReason
+func buildSuppression(justification string) *sarif.Suppression {
 	if justification == "" {
 		justification = "Ignored via .secdbignore"
 	}
