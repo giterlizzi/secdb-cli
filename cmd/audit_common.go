@@ -166,12 +166,49 @@ func runPURLAudit(purls []string, opts *auditOptions, cfg auditRenderConfig) err
 	return renderAudit(cfg)
 }
 
+// renderAudit is the pipeline every audit command ends with: it writes the
+// results in the requested format, sends the notifications (--notify), then
+// applies --fail-on. All flags were validated up front (auditOptions.validate).
 func renderAudit(cfg auditRenderConfig) error {
-	meta := cfg.meta
-
 	overall := audit.OverallSeverity(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
 
-	// display a warning in "text" output
+	if err := writeAuditOutput(cfg); err != nil {
+		return err
+	}
+
+	if cfg.opts.notify {
+		if err := sendNotifications(cfg, overall); err != nil {
+			return err
+		}
+	}
+
+	return failOnError(cfg.opts.failOn, overall)
+}
+
+// writeAuditOutput writes the audit results to stdout in the --output format.
+func writeAuditOutput(cfg auditRenderConfig) error {
+	switch outputFormat {
+	case "text":
+		return writeAuditText(cfg)
+	case "sarif":
+		r := audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
+		return output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), cfg.source, cfg.sources)
+	case "csv":
+		r := audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
+		return output.WriteCSV(os.Stdout, r, "audit-details-csv")
+	default:
+		if err := output.Render(os.Stdout, cfg.data, output.Format(outputFormat), newOutputOptions()); err != nil {
+			return fmt.Errorf("failed to render output: %w", err)
+		}
+		return nil
+	}
+}
+
+// writeAuditText renders the --view (summary or details) text report, headed by
+// the command's metadata rows and, when unfixed vulnerabilities were hidden, a
+// warning row that points at --show-unfixed.
+func writeAuditText(cfg auditRenderConfig) error {
+	meta := cfg.meta
 	if !cfg.opts.showUnfixed {
 		if n := audit.UnfixedCount(cfg.data); n > 0 {
 			meta = append(meta, report.MetaItem{
@@ -181,57 +218,32 @@ func renderAudit(cfg auditRenderConfig) error {
 		}
 	}
 
-	switch outputFormat {
-	case "text":
-		// --view is validated up front (auditOptions.validate): summary or details.
-		var r report.Report
-		if cfg.opts.view == "details" {
-			r = audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
-		} else {
-			r.Results = audit.SummarizePURLAudit(cfg.data, cfg.opts.showUnfixed)
-		}
-
-		r.BaseURL = cfg.baseURL
-		r.PrependMeta(meta...)
-
-		templateName := fmt.Sprintf("%s-%s", cfg.template, cfg.opts.view)
-
-		if err := output.RenderText(os.Stdout, r, templateName); err != nil {
-			return fmt.Errorf("failed to render details: %w", err)
-		}
-	case "sarif":
-		r := audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
-		if err := output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), cfg.source, cfg.sources); err != nil {
-			return err
-		}
-	case "csv":
-		r := audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
-		if err := output.WriteCSV(os.Stdout, r, "audit-details-csv"); err != nil {
-			return err
-		}
-	default:
-		if err := output.Render(os.Stdout, cfg.data, output.Format(outputFormat), newOutputOptions()); err != nil {
-			return fmt.Errorf("failed to render output: %w", err)
-		}
+	var r report.Report
+	if cfg.opts.view == "details" {
+		r = audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
+	} else {
+		r.Results = audit.SummarizePURLAudit(cfg.data, cfg.opts.showUnfixed)
 	}
+	r.BaseURL = cfg.baseURL
+	r.PrependMeta(meta...)
 
-	if cfg.opts.notify {
-		if err := sendNotifications(cfg, overall); err != nil {
-			return err
-		}
+	templateName := fmt.Sprintf("%s-%s", cfg.template, cfg.opts.view)
+	if err := output.RenderText(os.Stdout, r, templateName); err != nil {
+		return fmt.Errorf("failed to render details: %w", err)
 	}
-
-	// --fail-on is validated and lowercased up front (auditOptions.validate).
-	if cfg.opts.failOn != "" && overall != "" {
-		if audit.SeverityLevels[overall] >= audit.SeverityLevels[cfg.opts.failOn] {
-			return &exitError{
-				code: 2,
-				msg:  fmt.Sprintf("audit failed: a package has a vulnerability with severity %q (fail-on=%q)", overall, cfg.opts.failOn),
-			}
-		}
-	}
-
 	return nil
+}
+
+// failOnError returns the exitError that ends the command with status 2 when
+// the overall severity reaches the --fail-on threshold, or nil.
+func failOnError(failOn, overall string) error {
+	if failOn == "" || overall == "" || audit.SeverityLevels[overall] < audit.SeverityLevels[failOn] {
+		return nil
+	}
+	return &exitError{
+		code: 2,
+		msg:  fmt.Sprintf("audit failed: a package has a vulnerability with severity %q (fail-on=%q)", overall, failOn),
+	}
 }
 
 func buildNotifyMessage(cfg auditRenderConfig, rep report.Report, overall string) notify.Message {

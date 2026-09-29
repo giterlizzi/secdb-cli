@@ -110,82 +110,70 @@ func latestCVSSScore(adv client.Advisory) float64 {
 // OverallSeverity returns the highest severity across the results, skipping
 // ignored and (unless showUnfixed) unfixed advisories.
 func OverallSeverity(results []client.AuditItem, ignoreFile *IgnoreFile, showUnfixed bool) string {
-	maxSeverity := ""
-
+	overall := ""
 	for _, r := range results {
 		for _, adv := range r.Advisories {
-
 			if hideUnfixed(r.PURL, adv, showUnfixed) {
 				continue
 			}
-
 			if ignored, _ := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.PURL); ignored {
 				slog.Debug("ignored", "advisory", adv.ID, "cves", adv.CVEs, "purl", r.PURL)
 				continue
 			}
-
-			severity := NormalizeSeverity(adv.Severity)
-			if SeverityLevels[severity] > SeverityLevels[maxSeverity] {
-				maxSeverity = severity
-			}
+			overall = maxSeverity(overall, NormalizeSeverity(adv.Severity))
 		}
 	}
-	return maxSeverity
+	return overall
+}
+
+// maxSeverity returns the more severe of two canonical severities (a on a tie).
+func maxSeverity(a, b string) string {
+	if SeverityLevels[b] > SeverityLevels[a] {
+		return b
+	}
+	return a
 }
 
 // SummarizePURLAudit shapes the results into one summary row per package.
 func SummarizePURLAudit(results []client.AuditItem, showUnfixed bool) []PackageResult {
 	out := make([]PackageResult, 0, len(results))
-
 	for _, r := range results {
-		cveSeen := make(map[string]bool)
-		cweSeen := make(map[string]bool)
-		maxSeverity := ""
-		advisoryCount := 0
-
-		for _, adv := range r.Advisories {
-
-			if hideUnfixed(r.PURL, adv, showUnfixed) {
-				continue
-			}
-
-			advisoryCount++
-
-			severity := NormalizeSeverity(adv.Severity)
-			if SeverityLevels[severity] > SeverityLevels[maxSeverity] {
-				maxSeverity = severity
-			}
-
-			for _, id := range adv.CVEs {
-				cveSeen[id] = true
-			}
-
-			for _, cwe := range adv.Weaknesses {
-				cweSeen[cwe.ID] = true
-			}
+		// A package whose advisories were all filtered out (e.g. all unfixed) is
+		// skipped, so the summary doesn't show a row with no visible findings.
+		if row := summarizePackage(r, showUnfixed); row.AdvisoryCount > 0 {
+			out = append(out, row)
 		}
+	}
+	return out
+}
 
-		// Every advisory was filtered out (e.g. all unfixed): skip the package so
-		// the summary doesn't show a row with no visible findings.
-		if advisoryCount == 0 {
+// summarizePackage builds the summary row of one audited package from its
+// visible advisories.
+func summarizePackage(r client.AuditItem, showUnfixed bool) PackageResult {
+	row := PackageResult{Package: r.Package}
+	cves, cwes := make(map[string]bool), make(map[string]bool)
+	for _, adv := range r.Advisories {
+		if hideUnfixed(r.PURL, adv, showUnfixed) {
 			continue
 		}
-
-		cves := slices.Collect(maps.Keys(cveSeen))
-		cwes := slices.Collect(maps.Keys(cweSeen))
-
-		// Descending, as before (e.g. newest CVE year first).
-		slices.SortFunc(cves, func(a, b string) int { return cmp.Compare(b, a) })
-		slices.SortFunc(cwes, func(a, b string) int { return cmp.Compare(b, a) })
-
-		out = append(out, PackageResult{
-			Package:       r.Package,
-			CVEs:          cves,
-			CWEs:          cwes,
-			AdvisoryCount: advisoryCount,
-			MaxSeverity:   maxSeverity,
-		})
+		row.AdvisoryCount++
+		row.MaxSeverity = maxSeverity(row.MaxSeverity, NormalizeSeverity(adv.Severity))
+		for _, id := range adv.CVEs {
+			cves[id] = true
+		}
+		for _, id := range cweIDs(adv) {
+			cwes[id] = true
+		}
 	}
+	row.CVEs, row.CWEs = sortedDesc(cves), sortedDesc(cwes)
+	return row
+}
+
+// sortedDesc returns the set's members in descending order (e.g. newest CVE
+// year first), or nil for an empty set.
+func sortedDesc(set map[string]bool) []string {
+	out := slices.Sorted(maps.Keys(set))
+	slices.Reverse(out)
 	return out
 }
 
@@ -193,73 +181,87 @@ func SummarizePURLAudit(results []client.AuditItem, showUnfixed bool) []PackageR
 // annotating each with its affected packages and ignore/unfixed status.
 func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnfixed bool) report.Report {
 	byID := make(map[string]*AdvisoryResult)
-	var order []string
-
-	rep := report.Report{}
+	var grouped []*AdvisoryResult // first-seen order, sorted by advisoryReport
 
 	for _, r := range results {
 		for _, adv := range r.Advisories {
-
-			unfixed := IsUnfixed(r.PURL, adv)
-
 			if hideUnfixed(r.PURL, adv, showUnfixed) {
 				continue
 			}
 
-			if _, exists := byID[adv.ID]; !exists {
-				byID[adv.ID] = &AdvisoryResult{
-					ID:          adv.ID,
-					Title:       adv.Title,
-					Summary:     adv.Summary,
-					Description: adv.Description,
-					URL:         adv.URL,
-					Severity:    NormalizeSeverity(adv.Severity),
-					CVEs:        adv.CVEs,
-					CWEs:        cweIDs(adv),
-					CVSSScore:   latestCVSSScore(adv),
-					Unfixed:     unfixed,
-				}
-
-				order = append(order, adv.ID)
+			res, ok := byID[adv.ID]
+			if !ok {
+				res = newAdvisoryResult(adv)
+				byID[adv.ID] = res
+				grouped = append(grouped, res)
 			}
-
-			res := byID[adv.ID]
-			res.Packages = append(res.Packages, r.Package)
-			res.PURLs = append(res.PURLs, r.PURL)
-
-			if unfixed {
-				res.Unfixed = true
-			}
-
-			// Evaluated per package, like OverallSeverity: a rule scoped to one
-			// package must not accept the advisory for the others.
-			if ignored, reason := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.PURL); ignored {
-				if res.IgnoredPURLs == nil {
-					res.IgnoredPURLs = make(map[string]string)
-				}
-				res.IgnoredPURLs[r.PURL] = reason
-			}
+			// Without showUnfixed an unfixed advisory was hidden above.
+			res.addPackage(r, adv, showUnfixed && IsUnfixed(r.PURL, adv), ignoreFile)
 		}
 	}
+	return advisoryReport(grouped)
+}
 
-	var ignoredCount, partiallyIgnored int
-	out := make([]AdvisoryResult, 0, len(order))
-	for _, id := range order {
-		res := byID[id]
+// addPackage records an affected package on the grouped row, with its unfixed
+// status and its own ignore match: evaluated per package, like OverallSeverity,
+// since a rule scoped to one package must not accept the advisory for the others.
+func (a *AdvisoryResult) addPackage(r client.AuditItem, adv client.Advisory, unfixed bool, ignoreFile *IgnoreFile) {
+	a.Packages = append(a.Packages, r.Package)
+	a.PURLs = append(a.PURLs, r.PURL)
+	a.Unfixed = a.Unfixed || unfixed
+
+	if ignored, reason := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.PURL); ignored {
+		if a.IgnoredPURLs == nil {
+			a.IgnoredPURLs = make(map[string]string)
+		}
+		a.IgnoredPURLs[r.PURL] = reason
+	}
+}
+
+// newAdvisoryResult starts the grouped row of an advisory, without packages.
+func newAdvisoryResult(adv client.Advisory) *AdvisoryResult {
+	return &AdvisoryResult{
+		ID:          adv.ID,
+		Title:       adv.Title,
+		Summary:     adv.Summary,
+		Description: adv.Description,
+		URL:         adv.URL,
+		Severity:    NormalizeSeverity(adv.Severity),
+		CVEs:        adv.CVEs,
+		CWEs:        cweIDs(adv),
+		CVSSScore:   latestCVSSScore(adv),
+	}
+}
+
+// advisoryReport finalizes the grouped advisories: it resolves each one's
+// whole-advisory ignore status, sorts them and adds the "Ignored" header row.
+func advisoryReport(grouped []*AdvisoryResult) report.Report {
+	var full, partial int
+	out := make([]AdvisoryResult, 0, len(grouped))
+	for _, res := range grouped {
 		switch {
 		case len(res.IgnoredPURLs) == 0:
 		case res.ignoredForAll():
-			res.Ignored = true
-			res.IgnoreReason = res.IgnoredPURLs[res.PURLs[0]]
-			ignoredCount++
+			res.Ignored, res.IgnoreReason = true, res.IgnoredPURLs[res.PURLs[0]]
+			full++
 		default:
-			partiallyIgnored++
+			partial++
 		}
 		out = append(out, *res)
 	}
+	sortAdvisories(out)
 
-	// Most severe first (then higher CVSS, then ID) so the details view leads
-	// with what matters; ties keep a stable, deterministic order.
+	rep := report.Report{Results: out}
+	if item, ok := ignoredMeta(full, partial); ok {
+		rep.AddMeta(item)
+	}
+	return rep
+}
+
+// sortAdvisories orders the advisories most severe first (then higher CVSS,
+// then ID), so the details view leads with what matters; ties keep a stable,
+// deterministic order.
+func sortAdvisories(out []AdvisoryResult) {
 	slices.SortStableFunc(out, func(a, b AdvisoryResult) int {
 		return cmp.Or(
 			cmp.Compare(SeverityLevels[b.Severity], SeverityLevels[a.Severity]),
@@ -267,21 +269,23 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 			cmp.Compare(a.ID, b.ID),
 		)
 	})
+}
 
-	rep.Results = out
-
-	if ignoredCount > 0 || partiallyIgnored > 0 {
-		value := strconv.Itoa(ignoredCount)
-		switch {
-		case partiallyIgnored > 0 && ignoredCount == 0:
-			value = fmt.Sprintf("%d for some packages only", partiallyIgnored)
-		case partiallyIgnored > 0:
-			value += fmt.Sprintf(" (+%d for some packages only)", partiallyIgnored)
-		}
-		rep.AddMeta(report.MetaItem{Label: "Ignored", Value: value})
+// ignoredMeta is the text header's "Ignored" row: the fully ignored advisories,
+// plus those accepted for some packages only (false when there are none).
+func ignoredMeta(full, partial int) (report.MetaItem, bool) {
+	var value string
+	switch {
+	case full == 0 && partial == 0:
+		return report.MetaItem{}, false
+	case partial == 0:
+		value = strconv.Itoa(full)
+	case full == 0:
+		value = fmt.Sprintf("%d for some packages only", partial)
+	default:
+		value = fmt.Sprintf("%d (+%d for some packages only)", full, partial)
 	}
-
-	return rep
+	return report.MetaItem{Label: "Ignored", Value: value}, true
 }
 
 // IgnoredFor reports whether an ignore rule accepts the advisory for purl, and

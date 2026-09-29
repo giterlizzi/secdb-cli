@@ -131,18 +131,12 @@ func ParseFile(path string) ([]Dependency, error) {
 // SupportedPatterns lists every manifest glob the registry handles, sorted and
 // de-duplicated, for help text and error messages.
 func SupportedPatterns() []string {
-	seen := make(map[string]bool)
 	var out []string
 	for _, p := range parsers {
-		for _, manifest := range p.Patterns() {
-			if !seen[manifest] {
-				seen[manifest] = true
-				out = append(out, manifest)
-			}
-		}
+		out = append(out, p.Patterns()...)
 	}
 	slices.Sort(out)
-	return out
+	return slices.Compact(out)
 }
 
 // Discover walks root recursively and returns the paths of every supported
@@ -155,28 +149,28 @@ func Discover(root string, skip map[string]bool, maxDepth int) ([]string, error)
 	}
 	var out []string
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
+		switch {
+		case err != nil:
 			return err
-		}
-		if d.IsDir() {
-			if path != root && skip[d.Name()] {
-				return filepath.SkipDir
-			}
-			if maxDepth > 0 {
-				rel, _ := filepath.Rel(root, path)
-				if rel != "." && strings.Count(rel, string(os.PathSeparator))+1 > maxDepth {
-					return filepath.SkipDir
-				}
-			}
-			return nil
-		}
-		if ParserFor(path) != nil {
+		case d.IsDir() && path != root && (skip[d.Name()] || tooDeep(root, path, maxDepth)):
+			return filepath.SkipDir
+		case !d.IsDir() && ParserFor(path) != nil:
 			out = append(out, path)
 		}
 		return nil
 	})
 	slices.Sort(out)
 	return out, err
+}
+
+// tooDeep reports whether dir is more than maxDepth levels below root
+// (0 = no limit).
+func tooDeep(root, dir string, maxDepth int) bool {
+	if maxDepth <= 0 {
+		return false
+	}
+	rel, err := filepath.Rel(root, dir)
+	return err == nil && strings.Count(rel, string(os.PathSeparator))+1 > maxDepth
 }
 
 func lineRange(line int) Range {

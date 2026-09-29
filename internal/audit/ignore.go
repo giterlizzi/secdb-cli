@@ -77,36 +77,34 @@ func (r IgnoreRule) active(now time.Time) bool {
 }
 
 // IsIgnored reports whether an advisory (by ID or one of its CVEs, optionally
-// scoped to a package) matches a rule, returning the rule's reason.
+// scoped to a package) matches an active rule, returning the rule's reason.
 func (f *IgnoreFile) IsIgnored(advisoryID string, cves []string, purl string) (bool, string) {
-	if f == nil {
+	if f == nil || len(f.Ignore) == 0 {
 		return false, ""
 	}
 
 	now := time.Now()
+	// A malformed PURL parses to the zero value, which no package-scoped rule matches.
+	pkg, _ := packageurl.FromString(purl)
 
 	for _, rule := range f.Ignore {
-		if !rule.active(now) {
-			continue
-		}
-
-		matched := rule.Vulnerability != "" && (rule.Vulnerability == advisoryID || slices.Contains(cves, rule.Vulnerability))
-
-		if matched && rule.Package != nil {
-			parsed, _ := packageurl.FromString(purl)
-
-			if rule.Package.Name != "" && parsed.Name != rule.Package.Name {
-				matched = false
-			}
-
-			if matched && rule.Package.Version != "" && parsed.Version != rule.Package.Version {
-				matched = false
-			}
-		}
-
-		if matched {
+		if rule.active(now) && rule.matches(advisoryID, cves, pkg) {
 			return true, rule.Reason
 		}
 	}
 	return false, ""
+}
+
+// matches reports whether the rule targets the advisory (by ID or one of its
+// CVEs) and, when it is scoped to a package, the audited one (name and, if
+// set, version).
+func (r IgnoreRule) matches(advisoryID string, cves []string, pkg packageurl.PackageURL) bool {
+	if r.Vulnerability == "" || (r.Vulnerability != advisoryID && !slices.Contains(cves, r.Vulnerability)) {
+		return false
+	}
+	if r.Package == nil {
+		return true
+	}
+	return (r.Package.Name == "" || r.Package.Name == pkg.Name) &&
+		(r.Package.Version == "" || r.Package.Version == pkg.Version)
 }
