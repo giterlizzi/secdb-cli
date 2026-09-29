@@ -3,7 +3,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 
@@ -48,10 +47,6 @@ var sbomAuditCmd = &cobra.Command{
 	`),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if sbomAuditFile == "" {
-			return errors.New("--file is required: pass the path to a CycloneDX SBOM (JSON)")
-		}
-
 		purls, err := audit.ReadPURLsFromSBOM(sbomAuditFile)
 		if err != nil {
 			return err
@@ -93,6 +88,7 @@ func init() {
 
 	sbomAuditCmd.Flags().StringVarP(&sbomAuditFile, "file", "f", "",
 		"Path to the CycloneDX SBOM (JSON) to audit")
+	_ = sbomAuditCmd.MarkFlagRequired("file")
 
 	sbomOpts.addFlags(sbomAuditCmd)
 }

@@ -3,7 +3,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -83,10 +82,9 @@ var manifestAuditCmd = &cobra.Command{
 			err   error
 		)
 
-		switch {
-		case manifestDir != "" && manifestFile != "":
-			return errors.New("--file and --directory are mutually exclusive")
-		case manifestDir != "":
+		// Exactly one of --file/--directory is set (enforced by the flag groups
+		// registered in init).
+		if manifestDir != "" {
 			files, err = manifest.Discover(manifestDir, nil, maxDepth)
 			if err != nil {
 				return err
@@ -94,10 +92,8 @@ var manifestAuditCmd = &cobra.Command{
 			if len(files) == 0 {
 				return fmt.Errorf("no supported manifests found under %s", manifestDir)
 			}
-		case manifestFile != "":
+		} else {
 			files = []string{manifestFile}
-		default:
-			return errors.New("--file or --directory is required")
 		}
 
 		var purls []string
@@ -165,6 +161,8 @@ func init() {
 		"Directory to recursively discover and audit manifests in (mutually exclusive with --file)")
 	manifestAuditCmd.Flags().IntVar(&maxDepth, "max-depth", 0,
 		"Max directory depth to descend with --directory (0 = unlimited)")
+	manifestAuditCmd.MarkFlagsMutuallyExclusive("file", "directory")
+	manifestAuditCmd.MarkFlagsOneRequired("file", "directory")
 
 	manifestOpts.addFlags(manifestAuditCmd)
 }
