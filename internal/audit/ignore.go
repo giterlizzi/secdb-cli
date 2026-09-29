@@ -4,7 +4,6 @@ package audit
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 	"slices"
 	"time"
@@ -47,7 +46,34 @@ func LoadIgnoreFile(path string) (*IgnoreFile, error) {
 	if err := yaml.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
+
+	// Reject a malformed expires date up front: silently skipping the rule
+	// would re-enable the finding (and --fail-on) without the operator noticing.
+	for i, rule := range f.Ignore {
+		if rule.Expires == "" {
+			continue
+		}
+		if _, err := time.Parse(time.DateOnly, rule.Expires); err != nil {
+			return nil, fmt.Errorf("parsing %s: rule %d (%s): invalid expires %q (want YYYY-MM-DD)", path, i+1, rule.Vulnerability, rule.Expires)
+		}
+	}
 	return &f, nil
+}
+
+// active reports whether the rule applies at now. A rule without expires
+// always does; one with an expires date applies through the end of that day in
+// now's location (local time): the date is the calendar day the operator
+// wrote, not a UTC instant. A malformed date makes the rule inactive (only
+// possible for a rule built by hand, since LoadIgnoreFile rejects it).
+func (r IgnoreRule) active(now time.Time) bool {
+	if r.Expires == "" {
+		return true
+	}
+	exp, err := time.ParseInLocation(time.DateOnly, r.Expires, now.Location())
+	if err != nil {
+		return false
+	}
+	return now.Before(exp.AddDate(0, 0, 1))
 }
 
 // IsIgnored reports whether an advisory (by ID or one of its CVEs, optionally
@@ -60,16 +86,8 @@ func (f *IgnoreFile) IsIgnored(advisoryID string, cves []string, purl string) (b
 	now := time.Now()
 
 	for _, rule := range f.Ignore {
-		if rule.Expires != "" {
-			exp, err := time.Parse("2006-01-02", rule.Expires)
-			if err != nil {
-				slog.Warn("ignore rule has an invalid expires date, skipping it", "vulnerability", rule.Vulnerability, "expires", rule.Expires, "error", err)
-				continue
-			}
-			// expires is a calendar date, so the rule stays active through the end of that day.
-			if now.After(exp.AddDate(0, 0, 1)) {
-				continue
-			}
+		if !rule.active(now) {
+			continue
 		}
 
 		matched := rule.Vulnerability != "" && (rule.Vulnerability == advisoryID || slices.Contains(cves, rule.Vulnerability))
