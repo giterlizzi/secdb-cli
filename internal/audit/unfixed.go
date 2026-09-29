@@ -17,40 +17,32 @@ import (
 // qualifier). This is audit domain logic (an interpretation of the data), so it
 // lives here rather than in the API client.
 func IsUnfixed(purl string, adv client.Advisory) bool {
-
-	auditedPurl, err := packageurl.FromString(purl)
+	audited, err := packageurl.FromString(purl)
 	if err != nil {
 		return false
 	}
 
-	auditedDistro := distroQualifier(auditedPurl)
-
 	for _, pkg := range adv.Packages {
-		if pkg.Status != "affected" {
-			continue
-		}
-
-		advPurl, err := packageurl.FromString(pkg.PURL)
-		if err != nil {
-			continue
-		}
-		// An advisory often lists sibling packages (lodash and lodash.trim, openssl
-		// and edk2): only the audited package's own remediation counts.
-		if auditedPurl.Type != advPurl.Type || auditedPurl.Namespace != advPurl.Namespace || auditedPurl.Name != advPurl.Name {
-			continue
-		}
-
-		if auditedDistro != "" && distroQualifier(advPurl) != auditedDistro {
-			continue
-		}
-
-		if pkg.Remediation == "none_available" {
+		if pkg.Status == "affected" && pkg.Remediation == "none_available" && isAuditedPackage(audited, pkg.PURL) {
 			slog.Debug("no fix is available", "advisory", adv.ID, "package", purl)
 			return true
 		}
 	}
-
 	return false
+}
+
+// isAuditedPackage reports whether an advisory package PURL is the audited
+// package: same type, namespace and name, and the same "distro" qualifier when
+// the audited PURL has one. An advisory often lists sibling packages (lodash
+// and lodash.trim, openssl and edk2), and only the audited package's own
+// remediation counts.
+func isAuditedPackage(audited packageurl.PackageURL, purl string) bool {
+	p, err := packageurl.FromString(purl)
+	if err != nil || p.Type != audited.Type || p.Namespace != audited.Namespace || p.Name != audited.Name {
+		return false
+	}
+	distro := distroQualifier(audited)
+	return distro == "" || distroQualifier(p) == distro
 }
 
 func distroQualifier(purl packageurl.PackageURL) string {

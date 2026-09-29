@@ -249,27 +249,35 @@ func (s *Server) discoverWorkspace(ctx *glsp.Context) {
 		}
 		slog.Debug("workspace discovery", "root", root, "manifests", len(files))
 		for _, f := range files {
-
-			s.mu.Lock()
-			isOpen := s.open[filenameToURI(f)]
-			s.mu.Unlock()
-
-			if isOpen {
-				slog.Debug("discovery: skip open file", "file", f)
-				continue
-			}
-
-			content, err := os.ReadFile(f)
-			if err != nil {
-				slog.Debug("discovery: failed to read manifest", "file", f, "error", err)
-				continue
-			}
-
-			if err := s.auditManifest(ctx, filenameToURI(f), content); err != nil {
-				slog.Debug("discovery: audit failed", "file", f, "error", err)
-			}
+			s.auditDiscovered(ctx, f)
 		}
 	}
+}
+
+// auditDiscovered audits a manifest found by the workspace discovery, unless the
+// editor has it open: open files are kept fresh by the edit path.
+func (s *Server) auditDiscovered(ctx *glsp.Context, filename string) {
+	uri := filenameToURI(filename)
+	if s.isOpen(uri) {
+		slog.Debug("discovery: skip open file", "file", filename)
+		return
+	}
+
+	content, err := os.ReadFile(filename)
+	if err != nil {
+		slog.Debug("discovery: failed to read manifest", "file", filename, "error", err)
+		return
+	}
+	if err := s.auditManifest(ctx, uri, content); err != nil {
+		slog.Debug("discovery: audit failed", "file", filename, "error", err)
+	}
+}
+
+// isOpen reports whether the editor has the document open.
+func (s *Server) isOpen(uri protocol.DocumentUri) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.open[uri]
 }
 
 func uriToFilename(uri protocol.DocumentUri) (string, error) {
@@ -345,36 +353,41 @@ func buildDiagnostics(deps []manifest.Dependency, items []client.AuditItem, base
 	}
 
 	var diags []protocol.Diagnostic
-	source := sourceName
 	for _, d := range deps {
 		for _, adv := range byPURL[d.PURL] {
 			unfixed := audit.IsUnfixed(d.PURL, adv)
-			if unfixed && !showUnfixed {
-				continue
+			if !unfixed || showUnfixed {
+				diags = append(diags, diagnosticFor(d, adv, baseURL, ignore, unfixed))
 			}
-
-			message := adv.ID + ": " + adv.Title
-			if unfixed {
-				message += " (no fix available)"
-			}
-			severity := toDiagnosticSeverity(adv.Severity)
-			if ignored, reason := ignore.IsIgnored(adv.ID, adv.CVEs, d.PURL); ignored {
-				hint := protocol.DiagnosticSeverityHint
-				severity = &hint
-				message += " (ignored: " + reason + ")"
-			}
-
-			diags = append(diags, protocol.Diagnostic{
-				Range:           toRange(d.Range),
-				Severity:        severity,
-				Message:         message,
-				Source:          &source,
-				Code:            &protocol.IntegerOrString{Value: adv.ID},
-				CodeDescription: &protocol.CodeDescription{HRef: util.AdvisoryURL(baseURL, adv.ID)},
-			})
 		}
 	}
 	return diags
+}
+
+// diagnosticFor builds the diagnostic of one advisory on one dependency: an
+// unfixed advisory says so in the message, and one accepted by the ignore file
+// is downgraded to a hint that carries the rule's reason.
+func diagnosticFor(d manifest.Dependency, adv client.Advisory, baseURL string, ignore *audit.IgnoreFile, unfixed bool) protocol.Diagnostic {
+	message := adv.ID + ": " + adv.Title
+	if unfixed {
+		message += " (no fix available)"
+	}
+	severity := toDiagnosticSeverity(adv.Severity)
+	if ignored, reason := ignore.IsIgnored(adv.ID, adv.CVEs, d.PURL); ignored {
+		hint := protocol.DiagnosticSeverityHint
+		severity = &hint
+		message += " (ignored: " + reason + ")"
+	}
+
+	source := sourceName
+	return protocol.Diagnostic{
+		Range:           toRange(d.Range),
+		Severity:        severity,
+		Message:         message,
+		Source:          &source,
+		Code:            &protocol.IntegerOrString{Value: adv.ID},
+		CodeDescription: &protocol.CodeDescription{HRef: util.AdvisoryURL(baseURL, adv.ID)},
+	}
 }
 
 func toRange(r manifest.Range) protocol.Range {

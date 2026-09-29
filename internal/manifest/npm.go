@@ -47,11 +47,13 @@ func npmPURL(name, version string) string {
 
 type npmLock struct {
 	// v2/v3: a flat map keyed by install path ("node_modules/foo").
-	Packages map[string]struct {
-		Version string `json:"version"`
-	} `json:"packages"`
+	Packages map[string]npmLockPackage `json:"packages"`
 	// v1: a nested tree.
 	Dependencies map[string]npmLockDep `json:"dependencies"`
+}
+
+type npmLockPackage struct {
+	Version string `json:"version"`
 }
 
 type npmLockDep struct {
@@ -65,50 +67,63 @@ func parseNpmLock(content []byte) ([]Dependency, error) {
 		return nil, err
 	}
 
-	var deps []Dependency
-	seen := make(map[string]bool)
-	add := func(name, version string, direct bool) {
-		if name == "" || version == "" {
-			return
-		}
-		purl := npmPURL(name, version)
-		if seen[purl] {
-			return
-		}
-		seen[purl] = true
-		deps = append(deps, Dependency{
-			PURL:      purl,
-			Ecosystem: "npm",
-			Name:      name,
-			Version:   version,
-			Direct:    direct,
-		})
+	c := npmCollector{seen: make(map[string]bool)}
+	if len(lock.Packages) > 0 {
+		c.addInstallPaths(lock.Packages) // v2/v3
+	} else {
+		c.addTree(lock.Dependencies, true) // v1
 	}
 
-	if len(lock.Packages) > 0 { // v2/v3
-		for path, pkg := range lock.Packages {
-			if path == "" { // the root project itself
-				continue
-			}
-			rel := path[strings.LastIndex(path, "node_modules/")+len("node_modules/"):]
-			// A top-level install path (single node_modules segment) is a
-			// direct dependency; anything nested deeper is transitive.
-			direct := !strings.Contains(strings.TrimPrefix(path, "node_modules/"), "node_modules/")
-			add(rel, pkg.Version, direct)
-		}
-	} else { // v1
-		var walk func(m map[string]npmLockDep, direct bool)
-		walk = func(m map[string]npmLockDep, direct bool) {
-			for name, d := range m {
-				add(name, d.Version, direct)
-				walk(d.Dependencies, false)
-			}
-		}
-		walk(lock.Dependencies, true)
-	}
+	sortDeps(c.deps)
+	return c.deps, nil
+}
 
-	sortDeps(deps)
-	return deps, nil
+// npmCollector gathers the dependencies of a package-lock.json, de-duplicated
+// by PURL (the same name@version can be installed at several paths).
+type npmCollector struct {
+	deps []Dependency
+	seen map[string]bool
+}
+
+func (c *npmCollector) add(name, version string, direct bool) {
+	if name == "" || version == "" {
+		return
+	}
+	purl := npmPURL(name, version)
+	if c.seen[purl] {
+		return
+	}
+	c.seen[purl] = true
+	c.deps = append(c.deps, Dependency{
+		PURL:      purl,
+		Ecosystem: "npm",
+		Name:      name,
+		Version:   version,
+		Direct:    direct,
+	})
+}
+
+// addInstallPaths adds the v2/v3 flat "packages" map, keyed by install path
+// ("node_modules/foo", "node_modules/foo/node_modules/bar").
+func (c *npmCollector) addInstallPaths(packages map[string]npmLockPackage) {
+	for path, pkg := range packages {
+		if path == "" { // the root project itself
+			continue
+		}
+		name := path[strings.LastIndex(path, "node_modules/")+len("node_modules/"):]
+		// A top-level install path (single node_modules segment) is a direct
+		// dependency; anything nested deeper is transitive.
+		direct := !strings.Contains(strings.TrimPrefix(path, "node_modules/"), "node_modules/")
+		c.add(name, pkg.Version, direct)
+	}
+}
+
+// addTree adds the v1 nested "dependencies" tree; only its first level is direct.
+func (c *npmCollector) addTree(tree map[string]npmLockDep, direct bool) {
+	for name, d := range tree {
+		c.add(name, d.Version, direct)
+		c.addTree(d.Dependencies, false)
+	}
 }
 
 // --- yarn.lock ---

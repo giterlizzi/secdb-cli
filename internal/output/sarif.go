@@ -28,59 +28,62 @@ func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile strin
 	for _, adv := range advisories {
 		for _, purl := range adv.PURLs {
 			file, line := sourceFile, 0
-
 			if loc, ok := sources[purl]; ok {
 				file, line = loc.File, loc.Line
 			}
-
-			ruleID := fmt.Sprintf("%s-%s", adv.ID, purl)
-			resultTitle := fmt.Sprintf("A %s vulnerability in %s was found: %s", adv.Severity, purl, adv.Title)
-
-			fullDescription := buildFullDescription(adv)
-			shortDescription := fmt.Sprintf("[%s] %s vulnerability for %s package", adv.ID, adv.Severity, purl)
-
-			rule := run.AddRule(ruleID)
-			rule.WithName(ruleID)
-			rule.WithDescription(shortDescription)
-			rule.WithHelpURI(adv.URL)
-
-			if fullDescription != "" {
-				rule.WithFullDescription(sarif.NewMultiformatMessageString().
-					WithText(fullDescription))
-			}
-
-			rule.Properties = sarif.NewPropertyBag().
-				Add("security-severity", severityToScore(adv)).
-				Add("purls", []string{purl}).
-				Add("tags", buildTags(adv))
-
-			phys := sarif.NewPhysicalLocation().
-				WithArtifactLocation(sarif.NewSimpleArtifactLocation(file))
-			if line > 0 {
-				phys.WithRegion(sarif.NewRegion().WithStartLine(line))
-			}
-
-			result := run.CreateResultForRule(ruleID)
-			result.WithLevel(severityToSARIFLevel(adv)).
-				WithMessage(sarif.NewTextMessage(resultTitle)).
-				WithLocations([]*sarif.Location{
-					sarif.NewLocationWithPhysicalLocation(phys),
-				})
-
-			result.WithPartialFingerprints(map[string]string{
-				"primaryLocationLineHash": buildFingerprint(file, adv.ID, purl),
-			})
-
-			if ignored, reason := adv.IgnoredFor(purl); ignored {
-				result.AddSuppression(buildSuppression(reason))
-			}
-
+			addFinding(run, adv, purl, file, line)
 		}
-
 	}
 
 	sarifReport.AddRun(run)
 	return sarifReport.PrettyWrite(w)
+}
+
+// addFinding adds the rule and the result of one (advisory, package) pair to
+// run, located at file (and line, when known) and suppressed when an ignore
+// rule accepts the advisory for that package.
+func addFinding(run *sarif.Run, adv audit.AdvisoryResult, purl, file string, line int) {
+	ruleID := fmt.Sprintf("%s-%s", adv.ID, purl)
+	resultTitle := fmt.Sprintf("A %s vulnerability in %s was found: %s", adv.Severity, purl, adv.Title)
+
+	fullDescription := buildFullDescription(adv)
+	shortDescription := fmt.Sprintf("[%s] %s vulnerability for %s package", adv.ID, adv.Severity, purl)
+
+	rule := run.AddRule(ruleID)
+	rule.WithName(ruleID)
+	rule.WithDescription(shortDescription)
+	rule.WithHelpURI(adv.URL)
+
+	if fullDescription != "" {
+		rule.WithFullDescription(sarif.NewMultiformatMessageString().
+			WithText(fullDescription))
+	}
+
+	rule.Properties = sarif.NewPropertyBag().
+		Add("security-severity", severityToScore(adv)).
+		Add("purls", []string{purl}).
+		Add("tags", buildTags(adv))
+
+	phys := sarif.NewPhysicalLocation().
+		WithArtifactLocation(sarif.NewSimpleArtifactLocation(file))
+	if line > 0 {
+		phys.WithRegion(sarif.NewRegion().WithStartLine(line))
+	}
+
+	result := run.CreateResultForRule(ruleID)
+	result.WithLevel(severityToSARIFLevel(adv)).
+		WithMessage(sarif.NewTextMessage(resultTitle)).
+		WithLocations([]*sarif.Location{
+			sarif.NewLocationWithPhysicalLocation(phys),
+		})
+
+	result.WithPartialFingerprints(map[string]string{
+		"primaryLocationLineHash": buildFingerprint(file, adv.ID, purl),
+	})
+
+	if ignored, reason := adv.IgnoredFor(purl); ignored {
+		result.AddSuppression(buildSuppression(reason))
+	}
 }
 
 func buildSuppression(justification string) *sarif.Suppression {
