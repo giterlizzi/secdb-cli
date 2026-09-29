@@ -43,6 +43,7 @@ func gitLabEnv() Env {
 		ProjectURL: os.Getenv("CI_PROJECT_URL"),
 		RunURL:     os.Getenv("CI_PIPELINE_URL"),
 		Ref:        os.Getenv("CI_COMMIT_REF_NAME"),
+		Commit:     os.Getenv("CI_COMMIT_SHA"),
 		Tag:        os.Getenv("CI_COMMIT_TAG"),
 		Branch:     os.Getenv("CI_COMMIT_BRANCH"),
 		Author:     os.Getenv("CI_COMMIT_AUTHOR"),
