@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -26,28 +27,45 @@ const (
 	serverName = "secdb-lsp"
 	sourceName = "secdb"
 	delay      = 400 * time.Millisecond
+
+	// ignoreFileName is the ignore file looked up next to a manifest, the same
+	// default as the audit commands' --ignore-file.
+	ignoreFileName = ".secdbignore"
 )
 
 // Server is the secdb Language Server: it audits dependency manifests as they
 // are opened/edited and reports vulnerabilities as diagnostics.
 type Server struct {
-	client    *client.Client
-	handler   protocol.Handler
-	mu        sync.Mutex
-	timers    map[protocol.DocumentUri]*time.Timer
-	roots     []string
-	discovery bool
-	open      map[string]bool
+	client  *client.Client
+	opts    Options
+	handler protocol.Handler
+	mu      sync.Mutex
+	timers  map[protocol.DocumentUri]*time.Timer
+	roots   []string
+	open    map[string]bool
+}
+
+// Options configures the server. The zero value audits files as they are
+// opened only, with the same defaults as the audit commands (unfixed
+// vulnerabilities hidden, .secdbignore discovered next to the manifest).
+type Options struct {
+	// Discovery audits every manifest in the workspace on startup.
+	Discovery bool
+	// ShowUnfixed also reports vulnerabilities with no fix available.
+	ShowUnfixed bool
+	// IgnoreFile is an explicit ignore file; when empty, the nearest
+	// .secdbignore from the manifest's directory up to its workspace root is used.
+	IgnoreFile string
 }
 
 // NewServer wires the LSP handler. The client is built by the caller (cmd), so
 // this package never imports cmd (which would be an import cycle).
-func NewServer(c *client.Client, discovery bool) *Server {
+func NewServer(c *client.Client, opts Options) *Server {
 	s := &Server{
-		client:    c,
-		timers:    make(map[protocol.DocumentUri]*time.Timer),
-		discovery: discovery,
-		open:      make(map[string]bool),
+		client: c,
+		opts:   opts,
+		timers: make(map[protocol.DocumentUri]*time.Timer),
+		open:   make(map[string]bool),
 	}
 
 	s.handler = protocol.Handler{
@@ -100,7 +118,7 @@ func (s *Server) initialize(ctx *glsp.Context, params *protocol.InitializeParams
 
 func (s *Server) initialized(ctx *glsp.Context, params *protocol.InitializedParams) error {
 	slog.Debug("Initialized Language Server")
-	if s.discovery {
+	if s.opts.Discovery {
 		go s.discoverWorkspace(ctx)
 	}
 	return nil
@@ -155,8 +173,8 @@ func (s *Server) didClose(ctx *glsp.Context, params *protocol.DidCloseTextDocume
 	if t, ok := s.timers[uri]; ok {
 		t.Stop()
 		delete(s.timers, uri)
-		delete(s.open, uri)
 	}
+	delete(s.open, uri)
 	s.mu.Unlock()
 
 	publishDiagnostics(ctx, uri, nil)
@@ -215,7 +233,7 @@ func (s *Server) auditManifest(ctx *glsp.Context, uri protocol.DocumentUri, cont
 		return err
 	}
 
-	diags := buildDiagnostics(deps, data, s.client.BaseURL())
+	diags := buildDiagnostics(deps, data, s.client.BaseURL(), s.loadIgnoreFile(filename), s.opts.ShowUnfixed)
 	publishDiagnostics(ctx, uri, diags)
 
 	return nil
@@ -267,7 +285,59 @@ func filenameToURI(path string) protocol.DocumentUri {
 	return (&url.URL{Scheme: "file", Path: path}).String()
 }
 
-func buildDiagnostics(deps []manifest.Dependency, items []client.AuditItem, baseURL string) []protocol.Diagnostic {
+// loadIgnoreFile returns the ignore rules for the manifest at filename: the
+// explicit Options.IgnoreFile, or else the nearest .secdbignore found walking
+// up from the manifest's directory to its workspace root. It is re-read on
+// every audit, so an edit to the ignore file applies on the next one. A
+// malformed file is logged and ignored rather than blocking the diagnostics.
+func (s *Server) loadIgnoreFile(filename string) *audit.IgnoreFile {
+	path := s.opts.IgnoreFile
+	if path == "" {
+		path = findIgnoreFile(filename, s.roots)
+	}
+	if path == "" {
+		return nil
+	}
+	f, err := audit.LoadIgnoreFile(path)
+	if err != nil {
+		slog.Warn("ignoring invalid ignore file", "file", path, "error", err)
+		return nil
+	}
+	return f
+}
+
+// findIgnoreFile looks for .secdbignore from filename's directory up to the
+// workspace root that contains it (only that directory when the file is
+// outside every root), returning its path or "".
+func findIgnoreFile(filename string, roots []string) string {
+	dir := filepath.Dir(filename)
+	stop := dir
+	for _, r := range roots {
+		rel, err := filepath.Rel(r, dir)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			stop = r
+			break
+		}
+	}
+	for {
+		candidate := filepath.Join(dir, ignoreFileName)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+		parent := filepath.Dir(dir)
+		if dir == stop || parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+}
+
+// buildDiagnostics maps every (dependency, advisory) pair to a diagnostic at
+// the dependency's range, with the same rules as the audit commands: an
+// unfixed advisory is skipped unless showUnfixed, and an ignored one is kept
+// but downgraded to a hint carrying the ignore reason (an ignore rule never
+// hides a finding, it accepts it).
+func buildDiagnostics(deps []manifest.Dependency, items []client.AuditItem, baseURL string, ignore *audit.IgnoreFile, showUnfixed bool) []protocol.Diagnostic {
 	byPURL := make(map[string][]client.Advisory, len(items))
 	for _, it := range items {
 		byPURL[it.PURL] = it.Advisories
@@ -277,10 +347,26 @@ func buildDiagnostics(deps []manifest.Dependency, items []client.AuditItem, base
 	source := sourceName
 	for _, d := range deps {
 		for _, adv := range byPURL[d.PURL] {
+			unfixed := audit.IsUnfixed(d.PURL, adv)
+			if unfixed && !showUnfixed {
+				continue
+			}
+
+			message := adv.ID + ": " + adv.Title
+			if unfixed {
+				message += " (no fix available)"
+			}
+			severity := toDiagnosticSeverity(adv.Severity)
+			if ignored, reason := ignore.IsIgnored(adv.ID, adv.CVEs, d.PURL); ignored {
+				hint := protocol.DiagnosticSeverityHint
+				severity = &hint
+				message += " (ignored: " + reason + ")"
+			}
+
 			diags = append(diags, protocol.Diagnostic{
 				Range:           toRange(d.Range),
-				Severity:        toDiagnosticSeverity(adv.Severity),
-				Message:         adv.ID + ": " + adv.Title,
+				Severity:        severity,
+				Message:         message,
 				Source:          &source,
 				Code:            &protocol.IntegerOrString{Value: adv.ID},
 				CodeDescription: &protocol.CodeDescription{HRef: util.AdvisoryURL(baseURL, adv.ID)},

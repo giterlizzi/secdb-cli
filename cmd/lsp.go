@@ -9,7 +9,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var lspNoDiscovery bool
+var (
+	lspNoDiscovery bool
+	lspShowUnfixed bool
+	lspIgnoreFile  string
+)
 
 var lspCmd = &cobra.Command{
 	Use:     "lsp",
@@ -32,6 +36,13 @@ var lspCmd = &cobra.Command{
 		in the workspace, so findings show up without opening each file (noise
 		directories like node_modules/vendor/target are skipped). Pass
 		--no-discovery to audit only files as they are opened.
+
+		Findings follow the same rules as the audit commands. Vulnerabilities
+		with no fix available are hidden unless --show-unfixed is passed. A
+		finding matched by the ignore file is still reported, but as a hint
+		that shows the rule's reason. The ignore file is the nearest
+		.secdbignore from the manifest's directory up to the workspace root
+		(or the file given with --ignore-file), re-read on every audit.
 
 		The server speaks JSON-RPC over stdin/stdout, so it is meant to be
 		launched by an editor's LSP client, not run interactively (in a plain
@@ -91,13 +102,21 @@ var lspCmd = &cobra.Command{
 		  file; discovery then audits the rest of the workspace.
 	`),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return lsp.NewServer(newSecDbClient(), !lspNoDiscovery).Run()
+		return lsp.NewServer(newSecDbClient(), lsp.Options{
+			Discovery:   !lspNoDiscovery,
+			ShowUnfixed: lspShowUnfixed,
+			IgnoreFile:  lspIgnoreFile,
+		}).Run()
 	},
 }
 
 func init() {
 	lspCmd.Flags().BoolVar(&lspNoDiscovery, "no-discovery", false,
 		"Disable workspace discovery (only audit manifests as they are opened)")
+	lspCmd.Flags().BoolVar(&lspShowUnfixed, "show-unfixed", false,
+		"Also report vulnerabilities that have no fix available (hidden by default)")
+	lspCmd.Flags().StringVar(&lspIgnoreFile, "ignore-file", "",
+		"YAML file of ignore rules (default: the nearest .secdbignore up to the workspace root)")
 
 	rootCmd.AddCommand(lspCmd)
 }
