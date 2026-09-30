@@ -127,10 +127,10 @@ func buildFullDescription(advisory audit.AdvisoryResult) string {
 }
 
 func severityToSARIFLevel(advisory audit.AdvisoryResult) string {
-	switch advisory.Severity {
+	switch audit.NormalizeSeverity(advisory.Severity) {
 	case "critical", "high":
 		return sarif.LevelError
-	case "medium", "moderate":
+	case "medium":
 		return sarif.LevelWarning
 	default:
 		return sarif.LevelNote
@@ -142,12 +142,12 @@ func severityToScore(advisory audit.AdvisoryResult) string {
 		return fmt.Sprintf("%.1f", advisory.CVSSScore)
 	}
 
-	switch advisory.Severity {
+	switch audit.NormalizeSeverity(advisory.Severity) {
 	case "critical":
 		return "9.5"
 	case "high":
 		return "7.5"
-	case "medium", "moderate":
+	case "medium":
 		return "5.0"
 	case "low":
 		return "2.0"
