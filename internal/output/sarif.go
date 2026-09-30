@@ -21,7 +21,7 @@ import (
 func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile string, sources map[string]SourceLocation) error {
 	sarifReport := report.NewV210Report()
 
-	run := sarif.NewRunWithInformationURI("secdb-cli", "https://github.com/giterlizzi/secdb-cli")
+	run := sarif.NewRunWithInformationURI("secdb-cli", meta.RepoURL)
 	run.Tool.Driver.WithVersion(meta.Version)
 	run.AutomationDetails = sarif.NewRunAutomationDetails().WithID("secdb-cli/audit-purl")
 
