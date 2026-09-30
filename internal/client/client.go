@@ -38,14 +38,6 @@ type Response struct {
 	Header http.Header
 }
 
-// Errors returned for the API statuses a caller may want to handle; they are
-// wrapped by the endpoint methods, so match them with errors.Is.
-var (
-	ErrNotFound     = errors.New("not found")
-	ErrUnauthorized = errors.New("unauthorized (check SECDB_API_KEY)")
-	ErrRateLimited  = errors.New("rate limit exceeded")
-)
-
 // maxErrorBody caps how much of an unexpected response body is quoted in the
 // returned error, so e.g. a proxy's HTML error page doesn't flood the terminal.
 const maxErrorBody = 512
@@ -117,14 +109,14 @@ func (c *Client) request(req *http.Request) (Response, error) {
 	switch res.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return Response{}, ErrNotFound
+		return Response{}, errors.New("not found")
 	case http.StatusUnauthorized:
-		return Response{}, ErrUnauthorized
+		return Response{}, errors.New("unauthorized (check SECDB_API_KEY)")
 	case http.StatusTooManyRequests:
 		if reset := res.Header.Get("RateLimit-Reset"); reset != "" {
-			return Response{}, fmt.Errorf("%w (retry in %ss)", ErrRateLimited, reset)
+			return Response{}, fmt.Errorf("rate limit exceeded (retry in %ss)", reset)
 		}
-		return Response{}, ErrRateLimited
+		return Response{}, errors.New("rate limit exceeded")
 	default:
 		if len(body) > maxErrorBody {
 			body = append(body[:maxErrorBody], "..."...)
