@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/giterlizzi/secdb-cli/internal/audit"
 	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/Masterminds/sprig/v3"
@@ -82,10 +83,10 @@ func SeverityMarkdown(severity string) string {
 		return "-"
 	}
 
-	switch strings.ToLower(severity) {
-	case "critical", "important", "urgent", "severe", "high":
+	switch audit.NormalizeSeverity(severity) {
+	case "critical", "high":
 		emoji = "🔴"
-	case "medium", "moderate":
+	case "medium":
 		emoji = "🟠"
 	case "low":
 		emoji = "🟡"
