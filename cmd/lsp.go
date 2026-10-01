@@ -44,6 +44,19 @@ var lspCmd = &cobra.Command{
 		.secdbignore from the manifest's directory up to the workspace root
 		(or the file given with --ignore-file), re-read on every audit.
 
+		Since some editors (e.g. Zed) don't let you change the server command,
+		the flags can also be set from the editor's LSP settings, under a
+		"secdb" section, which override them (absent keys keep the flag value):
+		  discovery         audit the workspace on startup     (--no-discovery)
+		  showUnfixed       report unfixed vulnerabilities     (--show-unfixed)
+		  ignoreFile        explicit ignore file               (--ignore-file)
+		  discoverySummary  show the end-of-discovery summary  (default true)
+		  updateNotice      show the "new version" message     (default true)
+		The server asks for them (workspace/configuration) on startup and
+		again whenever the editor reports a change, which applies from the
+		next audit, without a restart. The same keys are also accepted, flat,
+		as initializationOptions, for clients without workspace/configuration.
+
 		The server speaks JSON-RPC over stdin/stdout, so it is meant to be
 		launched by an editor's LSP client, not run interactively (in a plain
 		terminal it just waits for input). It honors the same SECDB_API_KEY and
@@ -51,7 +64,7 @@ var lspCmd = &cobra.Command{
 	`),
 	Example: heredoc.Doc(`
 		Run the server (usually done by the editor, not by hand):
-	        
+
 			secdb lsp
 
 		Kate (Settings > LSP Client > User Server Settings):
@@ -62,7 +75,8 @@ var lspCmd = &cobra.Command{
 		        "command": ["secdb", "lsp"],
 		        "commandDebug": ["secdb", "lsp", "--debug"],
 		        "rootIndicationFileNames": ["go.mod", "package-lock.json", "yarn.lock", "requirements.txt", "Gemfile.lock", "pom.xml", "composer.lock"],
-		        "highlightingModeRegex": "^(Go|JSON|Python|Ruby|XML)$"
+		        "highlightingModeRegex": "^(Go|JSON|Python|Ruby|XML)$",
+		        "settings": { "secdb": { "showUnfixed": true } }
 		      }
 		    }
 		  }
@@ -90,6 +104,7 @@ var lspCmd = &cobra.Command{
 		        name = "secdb",
 		        cmd = { "secdb", "lsp" },
 		        root_dir = vim.fs.root(args.buf, { ".git", "go.mod", "package.json", "pom.xml" }),
+		        settings = { secdb = { showUnfixed = true } },
 		      })
 		    end,
 		  })
@@ -99,13 +114,23 @@ var lspCmd = &cobra.Command{
 		  Zed can't point at an arbitrary LSP binary from settings; install the
 		  extension and Zed starts "secdb lsp" on the recognized manifests. Note
 		  that Zed launches the server lazily, on opening the first recognized
-		  file; discovery then audits the rest of the workspace.
+		  file; discovery then audits the rest of the workspace. Settings go in
+		  Zed's settings.json:
+
+		  {
+		    "lsp": {
+		      "secdb": {
+		        "settings": { "secdb": { "showUnfixed": true, "discoverySummary": true } }
+		      }
+		    }
+		  }
 	`),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return lsp.NewServer(newSecDbClient(), lsp.Options{
-			Discovery:   !lspNoDiscovery,
-			ShowUnfixed: lspShowUnfixed,
-			IgnoreFile:  lspIgnoreFile,
+			Discovery:       !lspNoDiscovery,
+			ShowUnfixed:     lspShowUnfixed,
+			IgnoreFile:      lspIgnoreFile,
+			UpdateAvailable: updateCheckCh,
 		}).Run()
 	},
 }
