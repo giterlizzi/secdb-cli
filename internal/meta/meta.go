@@ -22,6 +22,6 @@ var (
 	// BuildDate is the build timestamp (UTC, RFC3339).
 	BuildDate = "0"
 
-	// Repository URL
+	// RepoURL is the project repository URL.
 	RepoURL = "https://github.com/giterlizzi/secdb-cli"
 )
