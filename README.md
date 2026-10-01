@@ -238,6 +238,20 @@ Findings follow the same rules as the `audit` commands. Vulnerabilities with no 
 | `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
 | `--ignore-file` | YAML file of accepted-risk rules (default: the nearest `.secdbignore` up to the workspace root) |
 
+**Editor settings.** Since some editors (e.g. Zed) don't let you change the server command, the same options can be set from the editor's LSP settings, under a `secdb` section. They override the flags, and a key you leave out keeps the flag's value:
+
+| Setting | Default | Description |
+|---|---|---|
+| `discovery` | `true` | Audit the whole workspace on startup (`--no-discovery`) |
+| `showUnfixed` | `false` | Also report vulnerabilities with no fix available (`--show-unfixed`) |
+| `ignoreFile` | nearest `.secdbignore` | YAML file of accepted-risk rules (`--ignore-file`) |
+| `discoverySummary` | `true` | Show the end-of-discovery summary message |
+| `updateNotice` | `true` | Show the "new version available" message |
+
+The server asks the editor for them (`workspace/configuration`) on startup and again whenever you change them, so a new value applies from the next audit without restarting the server. The same keys are also accepted, flat (without the `secdb` section), as `initializationOptions`, for editors that don't support `workspace/configuration`.
+
+When a newer `secdb` release is available, the server says so once with a message (with a **Release notes** button where the editor supports it). Turn it off with `updateNotice: false`, or with `SECDB_NO_UPDATE_CHECK`, like the CLI.
+
 <details>
 <summary><strong>Kate</strong> (Settings &gt; LSP Client &gt; User Server Settings)</summary>
 
@@ -248,7 +262,8 @@ Findings follow the same rules as the `audit` commands. Vulnerabilities with no 
       "command": ["secdb", "lsp"],
       "commandDebug": ["secdb", "lsp", "--debug"],
       "rootIndicationFileNames": ["go.mod", "package-lock.json", "yarn.lock", "requirements.txt", "Gemfile.lock", "pom.xml", "composer.lock"],
-      "highlightingModeRegex": "^(Go|JSON|Python|Ruby|XML)$"
+      "highlightingModeRegex": "^(Go|JSON|Python|Ruby|XML)$",
+      "settings": { "secdb": { "showUnfixed": true } }
     }
   }
 }
@@ -288,6 +303,7 @@ vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
       name = "secdb",
       cmd = { "secdb", "lsp" },
       root_dir = vim.fs.root(args.buf, { ".git", "go.mod", "package.json", "pom.xml" }),
+      settings = { secdb = { showUnfixed = true } },
     })
   end,
 })
@@ -300,6 +316,18 @@ vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
 <summary><strong>Zed</strong> (companion extension)</summary>
 
 Unlike Kate and Sublime, Zed can't point at an arbitrary LSP binary from its settings: a language server must be provided by an extension. Install the companion [**secdb Zed extension**](https://github.com/giterlizzi/secdb-zed) and, once enabled, Zed starts `secdb lsp` automatically on the recognized manifests (make sure `secdb` is on your `PATH`). Zed launches the server lazily, on opening the first recognized file; workspace discovery then audits the rest of the project.
+
+Settings go in Zed's `settings.json`:
+
+```json
+{
+  "lsp": {
+    "secdb": {
+      "settings": { "secdb": { "showUnfixed": true, "discoverySummary": true } }
+    }
+  }
+}
+```
 </details>
 
 A few files aren't recognized as a distinct language by every editor, so the server may not start on them out of the box: Sublime scopes `go.mod` as `text.xml.dtd` (hence the entry in the selector above), and `requirements.txt`, `Gemfile.lock` and `yarn.lock` are plain text. The server itself detects the format from the file name regardless; it's only the editor's trigger that needs the scope/language hint.

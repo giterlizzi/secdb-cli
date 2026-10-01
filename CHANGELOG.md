@@ -26,6 +26,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Notifications are independent of `--fail-on`. In GitHub Actions and GitLab CI
   the summary also carries the pipeline context (project, branch, commit, run
   link), and the "view details" link points to the CI run.
+- `lsp`: the server options can be set from the editor, which matters where the
+  editor owns the server command (e.g. Zed). The settings `discovery`,
+  `showUnfixed` and `ignoreFile` mirror the flags (and override them), and
+  `discoverySummary`/`updateNotice` turn off the two messages. They're read
+  from a `secdb` section of the editor's LSP settings (`workspace/configuration`,
+  re-read when they change, so no restart is needed) or, flat, from
+  `initializationOptions`.
+- `lsp`: the server tells you when a newer `secdb` release is available, with a
+  "Release notes" button where the editor supports it (same check as the CLI,
+  so `SECDB_NO_UPDATE_CHECK` and CI turn it off).
+- `lsp`: a `secdb/dependencies` notification with each manifest's dependencies
+  and their advisory counts, for clients that build a dependency view (e.g. an
+  editor extension). It's sent only to clients that declare the experimental
+  capability `secdbDependencies`, first right after parsing (without counts,
+  so the list shows up even if the audit fails) and again once the audit is
+  done.
 - `audit linux` accepts the SSH target as an argument, a shortcut for `--host`,
   `--user` and `--port`: `ssh://[user@]host[:port]`, or the same without the
   `ssh://` prefix (e.g. `secdb audit linux ops@server.example.com:2222`).
