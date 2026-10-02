@@ -23,6 +23,7 @@ import (
 var (
 	apiKey  string
 	baseURL string
+	webURL  string
 
 	debug bool
 
@@ -73,6 +74,13 @@ var rootCmd = &cobra.Command{
 		}
 		baseURL = u
 
+		// Validate web URL
+		w, err := client.ValidateBaseURL(webURL)
+		if err != nil {
+			return fmt.Errorf("invalid --web-url %q: %w", webURL, err)
+		}
+		webURL = w
+
 		// The API key travels in a header: warn when it would cross the network in
 		// clear text (a local dev server is fine).
 		if apiKey != "" && strings.HasPrefix(baseURL, "http://") && !client.IsLoopback(baseURL) {
@@ -86,6 +94,9 @@ var rootCmd = &cobra.Command{
 func init() {
 	rootCmd.PersistentFlags().StringVar(&baseURL, "base-url", "",
 		"ZEN SecDB API base URL (default: https://secdb.nttzen.cloud/)")
+
+	rootCmd.PersistentFlags().StringVar(&webURL, "web-url", "",
+		"ZEN SecDB web GUI URL for the links in the output, when it differs from --base-url (e.g. behind a proxy)")
 
 	rootCmd.PersistentFlags().StringVarP(&outputFormat, "output", "o", "text",
 		"Output format: text, json, yaml, template, html, sarif, csv (sarif/csv: audit only)")
@@ -165,7 +176,8 @@ func printUpdateNoticeIfReady() {
 func newSecDbClient() *client.Client {
 	c := client.NewClient().
 		WithAPIKey(apiKey).
-		WithBaseURL(baseURL)
+		WithBaseURL(baseURL).
+		WithWebURL(webURL)
 	return c
 }
 

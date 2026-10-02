@@ -46,7 +46,7 @@ var cveCmd = &cobra.Command{
 		}
 
 		if outputFormat == "text" {
-			data["secdb_url"] = client.BaseURL()
+			data["secdb_url"] = client.WebURL()
 			cve.SummarizeAffectedProducts(data)
 
 			return output.RenderText(os.Stdout, data, "cve", output.TerminalWrap(100))

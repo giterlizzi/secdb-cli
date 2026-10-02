@@ -37,7 +37,7 @@ type auditOptions struct {
 type auditRenderConfig struct {
 	data     []client.AuditItem
 	opts     *auditOptions
-	baseURL  string
+	webURL   string // web-GUI base for the permalinks, footer and notifications
 	meta     []report.MetaItem
 	template string
 	sources  map[string]output.SourceLocation
@@ -136,7 +136,7 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 	return renderAudit(auditRenderConfig{
 		data:     data,
 		opts:     opts,
-		baseURL:  client.BaseURL(),
+		webURL:   client.WebURL(),
 		template: "audit-linux",
 		source:   fmt.Sprintf("%s/%s", info.OS, info.Version),
 		meta: []report.MetaItem{
@@ -161,7 +161,7 @@ func runPURLAudit(purls []string, opts *auditOptions, cfg auditRenderConfig) err
 
 	cfg.data = data
 	cfg.opts = opts
-	cfg.baseURL = client.BaseURL()
+	cfg.webURL = client.WebURL()
 	cfg.template = "audit-purl"
 	return renderAudit(cfg)
 }
@@ -224,7 +224,7 @@ func writeAuditText(cfg auditRenderConfig) error {
 	} else {
 		r.Results = audit.SummarizePURLAudit(cfg.data, cfg.opts.showUnfixed)
 	}
-	r.BaseURL = cfg.baseURL
+	r.BaseURL = cfg.webURL
 	r.PrependMeta(meta...)
 
 	templateName := fmt.Sprintf("%s-%s", cfg.template, cfg.opts.view)
@@ -267,7 +267,7 @@ func buildNotifyMessage(cfg auditRenderConfig, rep report.Report, overall string
 
 	msg := notify.NewMessage(source, overall, findings)
 	msg.CI = ci.Detect()
-	msg.BaseURL = cfg.baseURL
+	msg.BaseURL = cfg.webURL
 	return msg
 }
 

@@ -31,7 +31,7 @@ type Message struct {
 	Truncated int               `json:"truncated,omitempty"` // findings omitted beyond the cap (0 = none)
 
 	CI      ci.Env    `json:"ci,omitzero"`        // CI provenance (omitted outside CI)
-	BaseURL string    `json:"base_url,omitempty"` // SecDB instance url
+	BaseURL string    `json:"base_url,omitempty"` // SecDB web-GUI url (client.WebURL)
 	Time    time.Time `json:"time"`               // when the notification was generated
 }
 

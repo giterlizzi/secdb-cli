@@ -20,7 +20,7 @@ type MetaItem struct {
 type Report struct {
 	Meta    []MetaItem
 	Results any
-	BaseURL string // SecDB base URL
+	BaseURL string // SecDB web-GUI URL (client.WebURL), for the permalinks and footer
 }
 
 // PrependMeta inserts items before the existing Meta, so caller-supplied

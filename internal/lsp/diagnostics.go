@@ -27,7 +27,7 @@ const sourceName = "secdb"
 func (s *Server) buildDiagnostics(deps []manifest.Dependency, items []client.AuditItem, filename string) ([]protocol.Diagnostic, map[string]int) {
 	showUnfixed := s.currentSettings().ShowUnfixed
 	ignore := s.loadIgnoreFile(filename)
-	baseURL := s.client.BaseURL()
+	webURL := s.client.WebURL()
 
 	byPURL := make(map[string][]client.Advisory, len(items))
 	for _, it := range items {
