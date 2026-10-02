@@ -36,7 +36,13 @@ Pre-built binaries for Linux, macOS and Windows (amd64/arm64) are published on t
 | `SECDB_SLACK_WEBHOOK`   | Slack Incoming Webhook URL for `--notify`                               |
 | `SECDB_TEAMS_WEBHOOK`   | Microsoft Teams (Power Automate Workflows) webhook URL for `--notify`   |
 
-`--base-url` overrides the API endpoint (default: `https://secdb.nttzen.cloud/`).
+`--base-url` overrides the API endpoint (default: `https://secdb.nttzen.cloud/`). It can include a path, e.g. a proxy at `https://gateway.example.com/secdb`.
+
+The links in the output (CVE, CWE and advisory pages, the report footer, the notifications' "view details", the editor diagnostics) point to the ZEN SecDB web GUI, which by default is on the same host as the API. When the API is reached through a proxy, set `--web-url` to the GUI address, so the links don't point to the proxy:
+
+```bash
+secdb --base-url https://gateway.example.com/secdb --web-url https://secdb.nttzen.cloud cve CVE-2021-44228
+```
 
 ## Usage
 
@@ -224,7 +230,7 @@ Support for more manifest formats can be added over time.
 
 ### Editor integration (Language Server)
 
-`secdb lsp` starts a [Language Server](https://microsoft.github.io/language-server-protocol/) that audits dependency manifests **as you open and edit them**, reporting known vulnerabilities inline as editor diagnostics, each linking to its ZEN SecDB advisory. It reuses the same engine as [`audit manifest`](#audit-a-dependency-manifest), so it recognizes the same files (`go.mod`, `package-lock.json`, `yarn.lock`, `requirements*.txt`, `Gemfile.lock`, `pom.xml`, `composer.lock`) and honors the same `SECDB_API_KEY` and `--base-url` configuration.
+`secdb lsp` starts a [Language Server](https://microsoft.github.io/language-server-protocol/) that audits dependency manifests **as you open and edit them**, reporting known vulnerabilities inline as editor diagnostics, each linking to its ZEN SecDB advisory. It reuses the same engine as [`audit manifest`](#audit-a-dependency-manifest), so it recognizes the same files (`go.mod`, `package-lock.json`, `yarn.lock`, `requirements*.txt`, `Gemfile.lock`, `pom.xml`, `composer.lock`) and honors the same `SECDB_API_KEY`, `--base-url` and `--web-url` configuration.
 
 The server speaks JSON-RPC over stdin/stdout and is meant to be launched by an editor's LSP client, not run by hand (in a plain terminal it just waits for input). It debounces edits, so it audits shortly after you stop typing rather than on every keystroke. Set `SECDB_DEBUG=1` (or pass `--debug`) to log to stderr.
 
@@ -253,7 +259,7 @@ The server asks the editor for them (`workspace/configuration`) on startup and a
 When a newer `secdb` release is available, the server says so once with a message (with a **Release notes** button where the editor supports it). Turn it off with `updateNotice: false`, or with `SECDB_NO_UPDATE_CHECK`, like the CLI.
 
 <details>
-<summary><strong>Kate</strong> (Settings &gt; LSP Client &gt; User Server Settings)</summary>
+<summary><strong>Kate / KDevelop</strong> (Settings &gt; LSP Client &gt; User Server Settings)</summary>
 
 ```json
 {
@@ -315,7 +321,7 @@ vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
 <details>
 <summary><strong>Zed</strong> (companion extension)</summary>
 
-Unlike Kate and Sublime, Zed can't point at an arbitrary LSP binary from its settings: a language server must be provided by an extension. Install the companion [**secdb Zed extension**](https://github.com/giterlizzi/secdb-zed) and, once enabled, Zed starts `secdb lsp` automatically on the recognized manifests (make sure `secdb` is on your `PATH`). Zed launches the server lazily, on opening the first recognized file; workspace discovery then audits the rest of the project.
+Unlike Kate, KDevelop and Sublime, Zed can't point at an arbitrary LSP binary from its settings: a language server must be provided by an extension. Install the companion [**secdb Zed extension**](https://github.com/giterlizzi/secdb-zed) and, once enabled, Zed starts `secdb lsp` automatically on the recognized manifests (make sure `secdb` is on your `PATH`). Zed launches the server lazily, on opening the first recognized file; workspace discovery then audits the rest of the project.
 
 Settings go in Zed's `settings.json`:
 
