@@ -8,7 +8,7 @@ import (
 	"github.com/giterlizzi/secdb-cli/internal/audit"
 	"github.com/giterlizzi/secdb-cli/internal/client"
 	"github.com/giterlizzi/secdb-cli/internal/manifest"
-	"github.com/giterlizzi/secdb-cli/internal/util"
+	"github.com/giterlizzi/secdb-cli/internal/weblink"
 
 	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
@@ -45,7 +45,7 @@ func (s *Server) buildDiagnostics(deps []manifest.Dependency, items []client.Aud
 		for _, adv := range byPURL[d.PURL] {
 			unfixed := audit.IsUnfixed(d.PURL, adv)
 			if !unfixed || showUnfixed {
-				diags = append(diags, diagnosticFor(d, adv, baseURL, ignore, unfixed))
+				diags = append(diags, diagnosticFor(d, adv, webURL, ignore, unfixed))
 				if first {
 					counts[d.PURL]++
 				}
@@ -59,7 +59,7 @@ func (s *Server) buildDiagnostics(deps []manifest.Dependency, items []client.Aud
 // diagnosticFor builds the diagnostic of one advisory on one dependency: an
 // unfixed advisory says so in the message, and one accepted by the ignore file
 // is downgraded to a hint that carries the rule's reason.
-func diagnosticFor(d manifest.Dependency, adv client.Advisory, baseURL string, ignore *audit.IgnoreFile, unfixed bool) protocol.Diagnostic {
+func diagnosticFor(d manifest.Dependency, adv client.Advisory, webURL string, ignore *audit.IgnoreFile, unfixed bool) protocol.Diagnostic {
 	message := adv.ID + ": " + adv.Title
 	if unfixed {
 		message += " (no fix available)"
@@ -78,7 +78,7 @@ func diagnosticFor(d manifest.Dependency, adv client.Advisory, baseURL string, i
 		Message:         message,
 		Source:          &source,
 		Code:            &protocol.IntegerOrString{Value: adv.ID},
-		CodeDescription: &protocol.CodeDescription{HRef: util.AdvisoryURL(baseURL, adv.ID)},
+		CodeDescription: &protocol.CodeDescription{HRef: weblink.Advisory(webURL, adv.ID)},
 	}
 }
 

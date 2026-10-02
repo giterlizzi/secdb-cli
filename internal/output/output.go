@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
-	"github.com/giterlizzi/secdb-cli/internal/util"
+	"github.com/giterlizzi/secdb-cli/internal/weblink"
 
 	"github.com/Masterminds/sprig/v3"
 )
@@ -53,9 +53,9 @@ func funcMap() template.FuncMap {
 	}
 	fm["severity"] = SeverityMarkdown
 	fm["ssvc_decision"] = SSVCDecisionMarkdown
-	fm["cve_url"] = util.CVEURL
-	fm["cwe_url"] = util.CWEURL
-	fm["advisory_url"] = util.AdvisoryURL
+	fm["cve_url"] = weblink.CVE
+	fm["cwe_url"] = weblink.CWE
+	fm["advisory_url"] = weblink.Advisory
 	return fm
 }
 

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"regexp"
 	"strings"
@@ -116,23 +115,4 @@ func Statusf(format string, args ...any) {
 	if term.IsTerminal(int(os.Stderr.Fd())) {
 		fmt.Fprintf(os.Stderr, format, args...)
 	}
-}
-func joinURL(baseURL string, path ...string) string {
-	u, _ := url.JoinPath(baseURL, path...)
-	return u
-}
-
-// CVEURL returns the web-GUI permalink to a CVE detail page.
-func CVEURL(baseURL, id string) string {
-	return joinURL(baseURL, "cve", "detail", id)
-}
-
-// CWEURL returns the web-GUI permalink to a CWE detail page.
-func CWEURL(baseURL, id string) string {
-	return joinURL(baseURL, "cwe", "detail", id)
-}
-
-// AdvisoryURL returns the web-GUI permalink to an advisory detail page.
-func AdvisoryURL(baseURL, id string) string {
-	return joinURL(baseURL, "security-advisory", "detail", id)
 }
