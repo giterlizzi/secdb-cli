@@ -522,6 +522,8 @@ CVE identifiers can be passed as arguments, read from a file with `--file`/`-f` 
 secdb check-update
 ```
 
+When a newer release is available, it shows the release notes of every version since the one you have installed (from the project's `CHANGELOG.md`), so you can see what changes before updating. If the notes can't be fetched, it still reports the new version with a link to its release page.
+
 A lightweight background check also runs automatically on every command (cooldown: 24h, silent on failure, skipped in CI or with `SECDB_NO_UPDATE_CHECK` set).
 
 ## License

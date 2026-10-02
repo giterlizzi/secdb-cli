@@ -45,8 +45,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `audit linux` accepts the SSH target as an argument, a shortcut for `--host`,
   `--user` and `--port`: `ssh://[user@]host[:port]`, or the same without the
   `ssh://` prefix (e.g. `secdb audit linux ops@server.example.com:2222`).
+- `check-update` shows the release notes of every version newer than the
+  installed one (newest first), taken from the `CHANGELOG.md` of the latest
+  release, so you see what changes before updating, including the versions in
+  between. If the notes can't be fetched, the update message is shown as
+  before.
 
 ### Changed
+
+- `check-update` output is now Markdown, rendered on a terminal: when it is
+  piped or redirected, the lines are Markdown text (e.g.
+  `**A new version is available:** ...`) instead of plain text.
 
 - The audit flags (`--view`, `--fail-on`, `--notify-on`, `--providers`) are now
   validated before any inventory collection or API call, so a typo fails fast
@@ -103,6 +112,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a rule could stay active a few hours after its day ended (east of UTC, e.g.
   until 02:00 in Italy in summer) or stop a few hours early (west of UTC). The
   date now ends at midnight local time.
+- The update check reported "already on the latest version" on the run that
+  actually contacted GitHub (the first one, then once every 24 hours), so a
+  new release was announced only from the following run. This affected
+  `check-update`, the notice printed after the other commands and the `lsp`
+  notification.
 
 ### Security
 
