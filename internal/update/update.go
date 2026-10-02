@@ -31,7 +31,7 @@ type ReleaseInfo struct {
 	PublishedAt time.Time `json:"published_at"`
 }
 
-const releaseURL = "https://api.github.com/repos/giterlizzi/secdb-cli/releases/latest"
+var releaseURL = "https://api.github.com/repos/giterlizzi/secdb-cli/releases/latest"
 
 func stateFilePath() (string, error) {
 	dir, err := os.UserCacheDir()
@@ -129,14 +129,15 @@ func IsAvailable(currentVersion string) (bool, *ReleaseInfo, error) {
 
 	if time.Since(state.LastChecked) > updateCheckInterval && !existsUpdate {
 		release, err := fetchLatest()
-		if err == nil {
-			state.LastChecked = time.Now()
-			state.LatestVersion = release.Version
-			state.LatestURL = release.URL
-			state.LatestPublishedAt = release.PublishedAt
-			_ = state.save()
+		if err != nil {
+			return false, nil, err
 		}
-		return false, nil, err
+
+		state.LastChecked = time.Now()
+		state.LatestVersion = release.Version
+		state.LatestURL = release.URL
+		state.LatestPublishedAt = release.PublishedAt
+		_ = state.save()
 	}
 
 	if semver.IsValid(state.LatestVersion) && semver.Compare(state.LatestVersion, currentVersion) > 0 {
