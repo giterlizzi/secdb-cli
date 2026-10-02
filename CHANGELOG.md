@@ -9,6 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `--web-url`: the ZEN SecDB web GUI address used for the links in the output
+  (CVE/CWE/advisory permalinks, report footer, notifications, LSP diagnostics),
+  when it differs from the API `--base-url`, e.g. when the API is reached through
+  a proxy (`--base-url https://gateway.example.com/secdb`). It defaults to
+  `--base-url`, so nothing changes without it.
 - Notifications for the audit commands: pass `--notify` to send a summary of the
   results (overall severity, per-severity counts, up to 20 findings with a count
   of the rest) to one or more providers, configured from the environment:
@@ -53,6 +58,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- An invalid `--base-url` is now an error (exit status 1) instead of a warning
+  followed by a silent fallback to the default instance. The value must be an
+  absolute `http`/`https` URL with a host, without credentials, query or
+  fragment (e.g. `https://secdb.example.com`). A plain `http` URL still works,
+  but prints a warning when an API key is set and the host isn't the local
+  machine, since the key would travel unencrypted.
 - `check-update` output is now Markdown, rendered on a terminal: when it is
   piped or redirected, the lines are Markdown text (e.g.
   `**A new version is available:** ...`) instead of plain text.
