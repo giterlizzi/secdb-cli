@@ -1,0 +1,8 @@
+**A new version is available:** {{ .Latest }} (current: {{ .Current }})
+- Released: {{ .Released }}
+- Release notes: {{ .URL }}
+{{ range .Notes }}
+## {{ .Version }} ({{ .Date }})
+
+{{ trim .Notes }}
+{{ end }}

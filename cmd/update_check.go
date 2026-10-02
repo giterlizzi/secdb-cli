@@ -4,8 +4,11 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
+	"os"
 
 	"github.com/giterlizzi/secdb-cli/internal/meta"
+	"github.com/giterlizzi/secdb-cli/internal/output"
 	"github.com/giterlizzi/secdb-cli/internal/update"
 	"github.com/giterlizzi/secdb-cli/internal/util"
 
@@ -41,12 +44,24 @@ var updateCheckCmd = &cobra.Command{
 		}
 
 		if isAvailable {
-			fmt.Printf("A new version is available: %s (current: %s)\n", releaseInfo.Version, meta.Version)
-			fmt.Printf("Released: %s (%s)\n", releaseInfo.PublishedAt.Format("2006-01-02"), util.TimeAgo(releaseInfo.PublishedAt))
-			fmt.Printf("Release notes: %s\n", releaseInfo.URL)
-		} else {
-			fmt.Printf("You're already on the latest version (%s).\n", meta.Version)
+			releaseNotes, err := update.FetchReleaseNotes(releaseInfo.Version)
+			if err != nil {
+				slog.Debug("release notes unavailable", "err", err)
+			}
+
+			data := map[string]any{
+				"Latest":   releaseInfo.Version,
+				"Current":  meta.Version,
+				"Released": fmt.Sprintf("%s (%s)", releaseInfo.PublishedAt.Format("2006-01-02"), util.TimeAgo(releaseInfo.PublishedAt)),
+				"URL":      releaseInfo.URL,
+				"Notes":    update.ReleaseNotesAfterVersion(releaseNotes, meta.Version),
+			}
+
+			return output.RenderText(os.Stdout, data, "check-update", output.TerminalWrap(100))
+
 		}
+
+		fmt.Printf("You're already on the latest version (%s).\n", meta.Version)
 
 		return nil
 	},
