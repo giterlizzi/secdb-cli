@@ -13,8 +13,10 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +30,7 @@ var userAgent = fmt.Sprintf("secdb-cli/%s (+https://github.com/giterlizzi/secdb-
 // Client is an HTTP client for the ZEN SecDB API.
 type Client struct {
 	baseURL    string
+	webURL     string
 	apiKey     string
 	httpClient *http.Client
 }
@@ -60,22 +63,93 @@ func (c *Client) WithAPIKey(apiKey string) *Client {
 }
 
 // WithBaseURL overrides the API base URL (no-op when empty) and returns the
-// client for chaining.
+// client for chaining. It doesn't validate the value: cmd checks --base-url with
+// ValidateBaseURL first.
 func (c *Client) WithBaseURL(baseURL string) *Client {
 	if baseURL != "" {
-		if u, err := url.Parse(baseURL); err == nil && u.Scheme != "" && u.Host != "" {
-			c.baseURL = strings.TrimRight(baseURL, "/")
-		} else {
-			slog.Warn("invalid --base-url, falling back to default", "base_url", baseURL, "default", c.baseURL)
-		}
+		c.baseURL = strings.TrimRight(baseURL, "/")
 	}
 	return c
 }
 
-// BaseURL returns the configured base URL (no trailing slash). The ZEN SecDB
-// web GUI shares this host, so callers build permalinks like
-// BaseURL()+"/cve/detail/CVE-..." that follow a custom --base-url.
+// WithWebURL sets the base of the web-GUI permalinks (no-op when empty) and
+// returns the client for chaining. Like WithBaseURL, it doesn't validate the
+// value. Needed only when the API is reached through a proxy, so the GUI isn't on
+// the API host.
+func (c *Client) WithWebURL(webURL string) *Client {
+	if webURL != "" {
+		c.webURL = strings.TrimRight(webURL, "/")
+	}
+	return c
+}
+
+// ValidateBaseURL checks a --base-url value and returns it normalized (lowercase
+// scheme, no trailing slash); an empty value is returned as is, meaning "keep the
+// default". Only an absolute http(s) URL with a host is accepted, without
+// credentials, query or fragment, since the endpoint paths are appended to it.
+func ValidateBaseURL(baseURL string) (string, error) {
+	if baseURL == "" {
+		return "", nil
+	}
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		// url.Error quotes the whole URL, which the caller already does.
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			err = uerr.Err
+		}
+		return "", err
+	}
+
+	switch {
+	case u.Scheme != "http" && u.Scheme != "https":
+		return "", errors.New("must be an absolute http(s) URL, e.g. https://secdb.nttzen.cloud")
+	case u.Hostname() == "":
+		return "", errors.New("missing host")
+	case u.User != nil:
+		return "", errors.New("credentials are not allowed")
+	case strings.ContainsAny(baseURL, "?#"):
+		return "", errors.New("query and fragment are not allowed")
+	}
+	if p := u.Port(); p != "" {
+		if n, err := strconv.Atoi(p); err != nil || n < 1 || n > 65535 {
+			return "", fmt.Errorf("invalid port %q", p)
+		}
+	}
+
+	u.Path = strings.TrimRight(u.Path, "/")
+	u.RawPath = ""
+	return u.String(), nil
+}
+
+// IsLoopback reports whether the (validated) base URL points to the local
+// machine: "localhost" or a loopback IP.
+func IsLoopback(baseURL string) bool {
+	u, err := url.Parse(baseURL)
+	if err != nil {
+		return false
+	}
+	h := u.Hostname()
+	if h == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(h)
+	return ip != nil && ip.IsLoopback()
+}
+
+// BaseURL returns the configured API base URL (no trailing slash), where the
+// requests go. For links meant for a person, use WebURL.
 func (c *Client) BaseURL() string {
+	return c.baseURL
+}
+
+// WebURL returns the base of the web-GUI permalinks (no trailing slash), e.g.
+// weblink.CVE(WebURL(), id): the --web-url when set, else the API base URL,
+// since the ZEN SecDB GUI shares the API host unless a proxy sits in between.
+func (c *Client) WebURL() string {
+	if c.webURL != "" {
+		return c.webURL
+	}
 	return c.baseURL
 }
 

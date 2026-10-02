@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/giterlizzi/secdb-cli/internal/client"
@@ -64,6 +65,19 @@ var rootCmd = &cobra.Command{
 		}
 		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 		slog.SetDefault(logger)
+
+		// Validate base URL
+		u, err := client.ValidateBaseURL(baseURL)
+		if err != nil {
+			return fmt.Errorf("invalid --base-url %q: %w", baseURL, err)
+		}
+		baseURL = u
+
+		// The API key travels in a header: warn when it would cross the network in
+		// clear text (a local dev server is fine).
+		if apiKey != "" && strings.HasPrefix(baseURL, "http://") && !client.IsLoopback(baseURL) {
+			slog.Warn("--base-url uses plain http: the API key is sent unencrypted", "base_url", baseURL)
+		}
 
 		return nil
 	},
