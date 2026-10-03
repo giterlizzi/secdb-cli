@@ -5,6 +5,7 @@ package manifest
 import (
 	"cmp"
 	"encoding/json"
+	"net/url"
 	"slices"
 	"strings"
 
@@ -127,64 +128,170 @@ func (c *npmCollector) addTree(tree map[string]npmLockDep, direct bool) {
 }
 
 // --- yarn.lock ---
+//
+// Two formats share the file name. Classic (Yarn 1):
+//
+//	lodash@^4.17.0, lodash@^4.17.21:
+//	  version "4.17.21"
+//
+// Berry (Yarn 2+), YAML-like, which also records the resolved package:
+//
+//	"lodash@npm:^4.17.0, lodash@npm:^4.17.21":
+//	  version: 4.17.21
+//	  resolution: "lodash@npm:4.17.21"
 
-func parseYarnLock(content []byte) ([]Dependency, error) {
-	var deps []Dependency
-
-	currentName := ""
-	currentLine := 0
-
-	for i, raw := range strings.Split(string(content), "\n") {
-		lineNo := i + 1
-
-		if strings.TrimSpace(raw) == "" || strings.HasPrefix(raw, "#") {
-			continue
-		}
-
-		if !strings.HasPrefix(raw, " ") && !strings.HasPrefix(raw, "\t") {
-			// Header line: one or more comma-separated "name@range" specs, ":"-terminated.
-			currentName = yarnNameFromHeader(strings.TrimSuffix(strings.TrimSpace(raw), ":"))
-			currentLine = lineNo
-			continue
-		}
-
-		trimmed := strings.TrimSpace(raw)
-		if !strings.HasPrefix(trimmed, "version") || currentName == "" {
-			continue
-		}
-		version := strings.Trim(strings.TrimSpace(strings.TrimPrefix(trimmed, "version")), `"`)
-		// Skip the yarn-berry "__metadata:" block (its "version" is a schema number).
-		if version == "" || strings.HasPrefix(currentName, "__") {
-			currentName = ""
-			continue
-		}
-
-		deps = append(deps, Dependency{
-			PURL:      npmPURL(currentName, version),
-			Ecosystem: "npm",
-			Name:      currentName,
-			Version:   version,
-			Direct:    false,
-			Range:     lineRange(currentLine),
-		})
-		currentName = ""
-	}
-	return deps, nil
+// yarnEntry is one top-level block of a yarn.lock: its header line and the
+// fields of its first indentation level (nested blocks such as "dependencies"
+// are ignored).
+type yarnEntry struct {
+	header     string
+	line       int
+	version    string
+	resolution string
 }
 
-// yarnNameFromHeader extracts the package name from a yarn.lock header, dropping
-// the version range: `"lodash@^4.17.0"` -> "lodash",
-// `"@scope/pkg@npm:^1.0.0"` -> "@scope/pkg".
-func yarnNameFromHeader(header string) string {
-	if i := strings.Index(header, ","); i >= 0 {
-		header = header[:i]
+func parseYarnLock(content []byte) ([]Dependency, error) {
+	c := yarnCollector{seen: make(map[string]bool)}
+	var cur *yarnEntry
+
+	for i, raw := range strings.Split(string(content), "\n") {
+		raw = strings.TrimRight(raw, "\r")
+		switch {
+		case strings.TrimSpace(raw) == "" || strings.HasPrefix(raw, "#"):
+		case raw[0] != ' ' && raw[0] != '\t':
+			// Header line: one or more comma-separated specs, ":"-terminated.
+			c.add(cur)
+			cur = &yarnEntry{header: strings.TrimSuffix(strings.TrimSpace(raw), ":"), line: i + 1}
+		case cur != nil && strings.HasPrefix(raw, "  ") && raw[2] != ' ':
+			key, value := yarnField(raw)
+			switch key {
+			case "version":
+				cur.version = value
+			case "resolution":
+				cur.resolution = value
+			}
+		}
 	}
-	header = strings.Trim(strings.TrimSpace(header), `"`)
-	// The range is everything after the last "@"; a leading "@" (scope) is kept.
-	if at := strings.LastIndex(header, "@"); at > 0 {
-		header = header[:at]
+	c.add(cur)
+	return c.deps, nil
+}
+
+// yarnCollector gathers the yarn.lock dependencies in file order, de-duplicated
+// by PURL (e.g. a patched package and the original it patches).
+type yarnCollector struct {
+	deps []Dependency
+	seen map[string]bool
+}
+
+func (c *yarnCollector) add(e *yarnEntry) {
+	if e == nil {
+		return
 	}
-	return header
+	name, version, ok := e.pkg()
+	if !ok {
+		return
+	}
+	purl := npmPURL(name, version)
+	if c.seen[purl] {
+		return
+	}
+	c.seen[purl] = true
+	c.deps = append(c.deps, Dependency{
+		PURL:      purl,
+		Ecosystem: "npm",
+		Name:      name,
+		Version:   version,
+		Direct:    false,
+		Range:     lineRange(e.line),
+	})
+}
+
+// pkg returns the registry package an entry resolves to; ok is false for the
+// berry "__metadata" block and for anything that isn't a registry package
+// (workspaces, local links and files, git, tarball URLs).
+func (e *yarnEntry) pkg() (name, version string, ok bool) {
+	if e.resolution != "" {
+		return berryResolution(e.resolution)
+	}
+	name, ok = yarnNameFromHeader(e.header)
+	return name, e.version, ok && e.version != ""
+}
+
+// yarnField splits an entry field in either format, `version "4.17.21"` or
+// `version: 4.17.21`, into its key and unquoted value.
+func yarnField(line string) (key, value string) {
+	line = strings.TrimSpace(line)
+	i := strings.IndexAny(line, " :")
+	if i < 0 {
+		return line, ""
+	}
+	return line[:i], strings.Trim(strings.TrimLeft(line[i:], ": "), `"`)
+}
+
+// berryResolution reads the package a yarn berry "resolution" points to:
+// "lodash@npm:4.17.21" is lodash 4.17.21, the alias
+// "string-width-cjs@npm:string-width@4.2.3" is string-width 4.2.3, and the patch
+// "resolve@patch:resolve@npm%3A1.22.1#..." is the package it patches (resolve
+// 1.22.1, audited as such: the patch may not fix anything). Any other protocol
+// (workspace:, link:, portal:, file:, git, tarball URLs) isn't a registry
+// package, so ok is false.
+func berryResolution(res string) (name, version string, ok bool) {
+	ident, ref, found := cutYarnIdent(res)
+	if !found {
+		return "", "", false
+	}
+	switch {
+	case strings.HasPrefix(ref, "npm:"):
+		ref = strings.TrimPrefix(ref, "npm:")
+		if alias, v, isAlias := cutYarnIdent(ref); isAlias {
+			return alias, v, v != ""
+		}
+		return ident, ref, ref != ""
+	case strings.HasPrefix(ref, "patch:"):
+		inner, _, _ := strings.Cut(strings.TrimPrefix(ref, "patch:"), "#")
+		inner, err := url.PathUnescape(inner)
+		if err != nil {
+			return "", "", false
+		}
+		return berryResolution(inner)
+	}
+	return "", "", false
+}
+
+// yarnNameFromHeader extracts the package name from a classic yarn.lock header,
+// dropping the version range: `"lodash@^4.17.0"` -> "lodash",
+// `"@scope/pkg@npm:^1.0.0"` -> "@scope/pkg", and the alias
+// `"string-width-cjs@npm:string-width@^4.2.0"` -> "string-width". ok is false
+// when the range isn't a registry one (file:, link:, git, URLs) or there's no
+// "@" (e.g. the berry "__metadata" block).
+func yarnNameFromHeader(header string) (string, bool) {
+	spec, _, _ := strings.Cut(header, ",")
+	spec = strings.Trim(strings.TrimSpace(spec), `"`)
+	name, ref, ok := cutYarnIdent(spec)
+	if !ok {
+		return "", false
+	}
+	ref = strings.TrimPrefix(ref, "npm:")
+	if alias, aliasRef, isAlias := cutYarnIdent(ref); isAlias {
+		name, ref = alias, aliasRef
+	}
+	// A registry range ("^1.2.0", "1.x || 2.x", "latest") has no protocol and no
+	// path; anything else ("file:../x", "user/repo", "https://...") isn't audited.
+	return name, !strings.ContainsAny(ref, ":/")
+}
+
+// cutYarnIdent splits "name@rest" at the "@" that ends the package name,
+// skipping the leading "@" of a scoped name: "@scope/pkg@npm:1.0.0" ->
+// "@scope/pkg", "npm:1.0.0".
+func cutYarnIdent(s string) (name, rest string, ok bool) {
+	if len(s) < 2 {
+		return "", "", false
+	}
+	i := strings.Index(s[1:], "@")
+	if i < 0 {
+		return "", "", false
+	}
+	return s[:i+1], s[i+2:], true
 }
 
 func sortDeps(deps []Dependency) {

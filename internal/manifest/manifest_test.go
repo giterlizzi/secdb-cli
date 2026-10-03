@@ -3,6 +3,9 @@
 package manifest
 
 import (
+	"os"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -154,6 +157,75 @@ __metadata:
 		if d.Name == "__metadata" {
 			t.Errorf("__metadata leaked into deps: %+v", d)
 		}
+	}
+}
+
+// TestParseYarnLockBerry checks the yarn berry (v2+) format against a realistic
+// lockfile: versions written as "version: x" (not "x"), the package taken from
+// "resolution" (aliases resolve to the real name, a patch to the package it
+// patches), non-registry entries skipped, nested fields ignored.
+func TestParseYarnLockBerry(t *testing.T) {
+	src, err := os.ReadFile("testdata/yarn-berry.lock")
+	if err != nil {
+		t.Fatal(err)
+	}
+	deps, err := Parse("yarn.lock", src)
+	if err != nil {
+		t.Fatalf("Parse yarn.lock: %v", err)
+	}
+
+	want := []struct {
+		purl string
+		line int
+	}{
+		{"pkg:npm/%40babel/code-frame@7.24.7", 8},
+		{"pkg:npm/express@4.17.1", 18},
+		{"pkg:npm/lodash@4.17.21", 26},
+		{"pkg:npm/resolve@1.22.1", 40}, // the patch entry is the same package, de-duplicated
+		{"pkg:npm/string-width@4.2.3", 52},
+	}
+	if len(deps) != len(want) {
+		t.Fatalf("got %d deps, want %d: %+v", len(deps), len(want), deps)
+	}
+	for i, w := range want {
+		if deps[i].PURL != w.purl || deps[i].Range.Start.Line != w.line {
+			t.Errorf("dep %d = %s (line %d), want %s (line %d)", i, deps[i].PURL, deps[i].Range.Start.Line, w.purl, w.line)
+		}
+	}
+}
+
+// TestParseYarnLockClassicEdgeCases covers the classic format's aliases, the
+// non-registry ranges, a nested field named like "version" and CRLF line endings.
+func TestParseYarnLockClassicEdgeCases(t *testing.T) {
+	src := strings.ReplaceAll(`# yarn lockfile v1
+
+"string-width-cjs@npm:string-width@^4.2.0":
+  version "4.2.3"
+  resolved "https://registry.yarnpkg.com/string-width/-/string-width-4.2.3.tgz"
+
+express@^4.17.1:
+  version "4.17.1"
+  dependencies:
+    version-guard "^1.1.1"
+
+local-lib@file:../local-lib:
+  version "1.0.0"
+
+left-pad@left-pad/left-pad#v1.3.0:
+  version "1.3.0"
+`, "\n", "\r\n")
+
+	deps, err := Parse("yarn.lock", []byte(src))
+	if err != nil {
+		t.Fatalf("Parse yarn.lock: %v", err)
+	}
+	var got []string
+	for _, d := range deps {
+		got = append(got, d.PURL)
+	}
+	want := []string{"pkg:npm/string-width@4.2.3", "pkg:npm/express@4.17.1"}
+	if !slices.Equal(got, want) {
+		t.Errorf("PURLs = %v, want %v", got, want)
 	}
 }
 
