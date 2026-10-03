@@ -47,14 +47,26 @@ func npmPURL(name, version string) string {
 // --- package-lock.json ---
 
 type npmLock struct {
-	// v2/v3: a flat map keyed by install path ("node_modules/foo").
+	// v2/v3: a flat map keyed by install path ("node_modules/foo"); the "" key is
+	// the project itself, a key without node_modules a workspace package.
 	Packages map[string]npmLockPackage `json:"packages"`
 	// v1: a nested tree.
 	Dependencies map[string]npmLockDep `json:"dependencies"`
 }
 
 type npmLockPackage struct {
+	// Name is set when it differs from the install path: an alias
+	// ("node_modules/string-width-cjs" installing string-width) or a workspace.
+	Name    string `json:"name"`
 	Version string `json:"version"`
+	// Link marks a symlink to a workspace package, which isn't a registry package.
+	Link bool `json:"link"`
+
+	// What the project or a workspace declares, as in its package.json.
+	Dependencies         map[string]string `json:"dependencies"`
+	DevDependencies      map[string]string `json:"devDependencies"`
+	OptionalDependencies map[string]string `json:"optionalDependencies"`
+	PeerDependencies     map[string]string `json:"peerDependencies"`
 }
 
 type npmLockDep struct {
@@ -68,62 +80,115 @@ func parseNpmLock(content []byte) ([]Dependency, error) {
 		return nil, err
 	}
 
-	c := npmCollector{seen: make(map[string]bool)}
+	c := newNpmCollector()
 	if len(lock.Packages) > 0 {
 		c.addInstallPaths(lock.Packages) // v2/v3
 	} else {
-		c.addTree(lock.Dependencies, true) // v1
+		c.addTree(lock.Dependencies) // v1
 	}
 
 	sortDeps(c.deps)
 	return c.deps, nil
 }
 
-// npmCollector gathers the dependencies of a package-lock.json, de-duplicated
-// by PURL (the same name@version can be installed at several paths).
+// npmCollector gathers the dependencies of a package-lock.json or yarn.lock in
+// insertion order, de-duplicated by PURL (the same name@version can be installed
+// at several paths, or listed as a package and as its patched version): a
+// package is direct if any of its occurrences is, and keeps the first one's Range.
 type npmCollector struct {
-	deps []Dependency
-	seen map[string]bool
+	deps  []Dependency
+	index map[string]int // PURL -> position in deps
 }
 
-func (c *npmCollector) add(name, version string, direct bool) {
+func newNpmCollector() *npmCollector {
+	return &npmCollector{index: make(map[string]int)}
+}
+
+func (c *npmCollector) add(name, version string, direct bool, rng Range) {
 	if name == "" || version == "" {
 		return
 	}
 	purl := npmPURL(name, version)
-	if c.seen[purl] {
+	if i, ok := c.index[purl]; ok {
+		c.deps[i].Direct = c.deps[i].Direct || direct
 		return
 	}
-	c.seen[purl] = true
+	c.index[purl] = len(c.deps)
 	c.deps = append(c.deps, Dependency{
 		PURL:      purl,
 		Ecosystem: "npm",
 		Name:      name,
 		Version:   version,
 		Direct:    direct,
+		Range:     rng,
 	})
 }
 
 // addInstallPaths adds the v2/v3 flat "packages" map, keyed by install path
-// ("node_modules/foo", "node_modules/foo/node_modules/bar").
+// ("node_modules/foo", "node_modules/foo/node_modules/bar",
+// "packages/lib/node_modules/baz"). The project ("") and the workspace
+// packages ("packages/lib") are local code, not dependencies: they only tell
+// which dependencies are direct.
 func (c *npmCollector) addInstallPaths(packages map[string]npmLockPackage) {
+	direct := npmDeclared(packages)
 	for path, pkg := range packages {
-		if path == "" { // the root project itself
+		owner, installed, ok := cutNodeModules(path)
+		if !ok || pkg.Link {
 			continue
 		}
-		name := path[strings.LastIndex(path, "node_modules/")+len("node_modules/"):]
-		// A top-level install path (single node_modules segment) is a direct
-		// dependency; anything nested deeper is transitive.
-		direct := !strings.Contains(strings.TrimPrefix(path, "node_modules/"), "node_modules/")
-		c.add(name, pkg.Version, direct)
+		name := installed
+		if pkg.Name != "" {
+			name = pkg.Name
+		}
+		// npm hoists packages to the top-level node_modules, so a top-level
+		// install isn't necessarily direct: it is when the project or a workspace
+		// declares it and it's installed for one of them (not nested in a package).
+		c.add(name, pkg.Version, direct[installed] && isLocalPath(packages, owner), Range{})
 	}
 }
 
-// addTree adds the v1 nested "dependencies" tree; only its first level is direct.
-func (c *npmCollector) addTree(tree map[string]npmLockDep, direct bool) {
+// isLocalPath reports whether path is the project ("") or a workspace package,
+// as opposed to a package installed under node_modules.
+func isLocalPath(packages map[string]npmLockPackage, path string) bool {
+	_, ok := packages[path]
+	return ok && !strings.Contains(path, "node_modules/")
+}
+
+// npmDeclared returns the names the project and its workspaces declare, in
+// any dependency field: those are the direct dependencies.
+func npmDeclared(packages map[string]npmLockPackage) map[string]bool {
+	declared := make(map[string]bool)
+	for path, pkg := range packages {
+		if !isLocalPath(packages, path) {
+			continue
+		}
+		for _, deps := range []map[string]string{pkg.Dependencies, pkg.DevDependencies, pkg.OptionalDependencies, pkg.PeerDependencies} {
+			for name := range deps {
+				declared[name] = true
+			}
+		}
+	}
+	return declared
+}
+
+// cutNodeModules splits an install path at its last "node_modules/" segment:
+// "packages/lib/node_modules/@scope/x" -> "packages/lib", "@scope/x".
+// ok is false for a path with no node_modules (the project or a workspace).
+func cutNodeModules(path string) (owner, name string, ok bool) {
+	i := strings.LastIndex(path, "node_modules/")
+	if i < 0 {
+		return "", "", false
+	}
+	return strings.TrimSuffix(path[:i], "/"), path[i+len("node_modules/"):], true
+}
+
+// addTree adds the v1 nested "dependencies" tree. v1 doesn't record what the
+// project declares and its top level is hoisted (it holds transitive packages
+// too), so every dependency is reported as not direct rather than guessed.
+func (c *npmCollector) addTree(tree map[string]npmLockDep) {
 	for name, d := range tree {
-		c.add(name, d.Version, direct)
-		c.addTree(d.Dependencies, false)
+		c.add(name, d.Version, false, Range{})
+		c.addTree(d.Dependencies)
 	}
 }
 
@@ -140,70 +205,104 @@ func (c *npmCollector) addTree(tree map[string]npmLockDep, direct bool) {
 //	  version: 4.17.21
 //	  resolution: "lodash@npm:4.17.21"
 
-// yarnEntry is one top-level block of a yarn.lock: its header line and the
-// fields of its first indentation level (nested blocks such as "dependencies"
-// are ignored).
+// yarnEntry is one top-level block of a yarn.lock: its header line, the fields
+// of its first indentation level and the specs its "dependencies" block lists
+// (other nested blocks are ignored).
 type yarnEntry struct {
 	header     string
 	line       int
 	version    string
 	resolution string
+	deps       []string // "ms@npm:^2.1.3", the form a header spec takes
 }
 
+// parseYarnLock reads the entries first, then adds them: a berry workspace
+// entry lists the workspace's direct dependencies (devDependencies included)
+// and can come after them in the file. Classic lockfiles have no such entry,
+// so their dependencies are never direct.
 func parseYarnLock(content []byte) ([]Dependency, error) {
-	c := yarnCollector{seen: make(map[string]bool)}
-	var cur *yarnEntry
+	entries := readYarnEntries(content)
 
-	for i, raw := range strings.Split(string(content), "\n") {
-		raw = strings.TrimRight(raw, "\r")
-		switch {
-		case strings.TrimSpace(raw) == "" || strings.HasPrefix(raw, "#"):
-		case raw[0] != ' ' && raw[0] != '\t':
-			// Header line: one or more comma-separated specs, ":"-terminated.
-			c.add(cur)
-			cur = &yarnEntry{header: strings.TrimSuffix(strings.TrimSpace(raw), ":"), line: i + 1}
-		case cur != nil && strings.HasPrefix(raw, "  ") && raw[2] != ' ':
-			key, value := yarnField(raw)
-			switch key {
-			case "version":
-				cur.version = value
-			case "resolution":
-				cur.resolution = value
+	direct := make(map[string]bool)
+	for _, e := range entries {
+		if e.isWorkspace() {
+			for _, spec := range e.deps {
+				direct[spec] = true
 			}
 		}
 	}
-	c.add(cur)
+
+	c := newNpmCollector()
+	for _, e := range entries {
+		if name, version, ok := e.pkg(); ok {
+			c.add(name, version, e.declaredIn(direct), lineRange(e.line))
+		}
+	}
 	return c.deps, nil
 }
 
-// yarnCollector gathers the yarn.lock dependencies in file order, de-duplicated
-// by PURL (e.g. a patched package and the original it patches).
-type yarnCollector struct {
-	deps []Dependency
-	seen map[string]bool
+func readYarnEntries(content []byte) []*yarnEntry {
+	var entries []*yarnEntry
+	var cur *yarnEntry
+	inDeps := false
+
+	for i, raw := range strings.Split(string(content), "\n") {
+		raw = strings.TrimRight(raw, "\r")
+		indent := len(raw) - len(strings.TrimLeft(raw, " \t"))
+		switch {
+		case strings.TrimSpace(raw) == "" || strings.HasPrefix(raw, "#"):
+		case indent == 0:
+			// Header line: one or more comma-separated specs, ":"-terminated.
+			cur = &yarnEntry{header: strings.TrimSuffix(strings.TrimSpace(raw), ":"), line: i + 1}
+			entries = append(entries, cur)
+			inDeps = false
+		case cur == nil:
+		case indent == 2:
+			key, value := yarnField(raw)
+			cur.set(key, value)
+			inDeps = key == "dependencies"
+		case indent == 4 && inDeps:
+			name, rng := yarnField(raw)
+			cur.deps = append(cur.deps, name+"@"+rng)
+		}
+	}
+	return entries
 }
 
-func (c *yarnCollector) add(e *yarnEntry) {
-	if e == nil {
-		return
+func (e *yarnEntry) set(key, value string) {
+	switch key {
+	case "version":
+		e.version = value
+	case "resolution":
+		e.resolution = value
 	}
-	name, version, ok := e.pkg()
-	if !ok {
-		return
+}
+
+// specs returns the header's specs: `"lodash@npm:^4.17.0, lodash@npm:^4.17.21"`
+// -> "lodash@npm:^4.17.0", "lodash@npm:^4.17.21".
+func (e *yarnEntry) specs() []string {
+	specs := strings.Split(e.header, ",")
+	for i, spec := range specs {
+		specs[i] = strings.Trim(strings.TrimSpace(spec), `"`)
 	}
-	purl := npmPURL(name, version)
-	if c.seen[purl] {
-		return
+	return specs
+}
+
+// isWorkspace reports whether the entry is a berry workspace (the project or
+// one of its packages): `resolution: "my-app@workspace:."`.
+func (e *yarnEntry) isWorkspace() bool {
+	_, ref, ok := cutYarnIdent(e.resolution)
+	return ok && strings.HasPrefix(ref, "workspace:")
+}
+
+// declaredIn reports whether a workspace declares one of the entry's specs.
+func (e *yarnEntry) declaredIn(direct map[string]bool) bool {
+	for _, spec := range e.specs() {
+		if direct[spec] {
+			return true
+		}
 	}
-	c.seen[purl] = true
-	c.deps = append(c.deps, Dependency{
-		PURL:      purl,
-		Ecosystem: "npm",
-		Name:      name,
-		Version:   version,
-		Direct:    false,
-		Range:     lineRange(e.line),
-	})
+	return false
 }
 
 // pkg returns the registry package an entry resolves to; ok is false for the
