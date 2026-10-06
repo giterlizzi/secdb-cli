@@ -144,6 +144,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   installed. Only `==`/`===` and the lower bound of `>=`/`~=` are audited now,
   also when they come after another specifier (`<5,>=4.2`); a wildcard
   (`==2.*`) is skipped.
+- `Gemfile.lock`: gems from a `GIT` or `PATH` source were audited as the
+  rubygems.org gem with the same name, so a fork or a local gem got that gem's
+  advisories; they are skipped now. A platform-specific gem
+  (`nokogiri (1.15.4-x86_64-linux)`) kept the platform in its version and
+  matched no advisory; it is audited at its version now.
 - `check-update` exited with status 0 when the check failed, and ignored
   `--debug`/`SECDB_DEBUG`.
 - `audit docker --image` failed on images with an `ENTRYPOINT` binary, since

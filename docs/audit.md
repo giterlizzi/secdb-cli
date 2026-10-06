@@ -62,6 +62,7 @@ secdb audit manifest --directory ./services --max-depth 3 --fail-on=high
 What gets audited:
 
 - npm, Ruby and Composer: the versions resolved in the lockfile, i.e. what is actually installed.
+- Ruby: only the gems from a gem server (the `GEM` sections of `Gemfile.lock`). Gems from a git repository or a local path (`GIT`, `PATH`) are skipped, since they may be a fork or an unrelated gem with the same name as a public one. A platform-specific gem (`nokogiri (1.15.4-x86_64-linux)`) is audited at its version (1.15.4).
 - Python: the version written in the requirement: the exact one (`==2.28.0`), otherwise the lower bound of `>=` or `~=` (`>=2.28` audits 2.28). A requirement with only `!=`, `<`, `<=`, `>`, a wildcard (`==2.*`) or no version is skipped.
 - Maven: a single `pom.xml`. `${...}` properties and the versions in `<dependencyManagement>` are resolved; parent POMs, imported BOMs and transitive dependencies are not, so a dependency whose version comes from them is skipped.
 - Composer platform requirements (`php`, `ext-*`) are skipped.
