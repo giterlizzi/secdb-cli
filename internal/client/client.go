@@ -49,8 +49,28 @@ const maxErrorBody = 512
 func NewClient() *Client {
 	return &Client{
 		baseURL:    defaultBaseURL,
-		httpClient: &http.Client{Timeout: 120 * time.Second},
+		httpClient: &http.Client{Timeout: 120 * time.Second, CheckRedirect: checkRedirect},
 	}
+}
+
+// apiKeyHeader carries the API key on every request.
+const apiKeyHeader = "X-API-KEY"
+
+// maxRedirects is the same limit as net/http's default policy.
+const maxRedirects = 10
+
+// checkRedirect follows a redirect like net/http does, but drops the API key
+// when the redirect leaves the original scheme and host. net/http strips only
+// Authorization and Cookie on a cross-host redirect, so X-API-KEY would
+// otherwise reach the new host, in clear text after an https → http downgrade.
+func checkRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxRedirects {
+		return fmt.Errorf("stopped after %d redirects", maxRedirects)
+	}
+	if orig := via[0].URL; req.URL.Scheme != orig.Scheme || req.URL.Host != orig.Host {
+		req.Header.Del(apiKeyHeader)
+	}
+	return nil
 }
 
 // WithAPIKey sets the API key sent with each request (no-op when empty) and
@@ -161,7 +181,7 @@ func (c *Client) request(req *http.Request) (Response, error) {
 	}
 
 	if c.apiKey != "" {
-		req.Header.Set("X-API-KEY", c.apiKey)
+		req.Header.Set(apiKeyHeader, c.apiKey)
 	}
 
 	slog.Debug("request", "method", req.Method, "url", req.URL)
