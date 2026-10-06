@@ -15,6 +15,13 @@ import (
 // six spaces and are skipped. The DEPENDENCIES section lists what the Gemfile
 // declares ("  rails (~> 7.0)", "  mygem!" for a git/path source): those gems
 // are direct, the rest of the specs transitive.
+//
+// Only the specs of the GEM sections (gems from a gem server) are audited. The
+// GIT and PATH sections hold gems built from a repository or a local directory,
+// which may be a fork, or an unrelated gem that only shares a public gem's name:
+// auditing them as that public gem gives its advisories. A platform-specific gem
+// ("nokogiri (1.15.4-x86_64-linux)") is audited at its version, without the
+// platform: like Bundler, the version ends at the first "-".
 type rubyParser struct{}
 
 func (rubyParser) Ecosystem() string  { return "ruby" }
@@ -27,17 +34,19 @@ func (rubyParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	direct := gemfileDeclared(lines)
 
 	var deps []Dependency
+	section := ""
 	inSpecs := false
 
 	for i, raw := range lines {
 		// A non-indented, non-empty line starts a new top-level section (GEM,
-		// PLATFORMS, DEPENDENCIES, ...), ending any specs block.
+		// GIT, PATH, PLATFORMS, DEPENDENCIES, ...), ending any specs block.
 		if raw != "" && !strings.HasPrefix(raw, " ") {
+			section = raw
 			inSpecs = false
 			continue
 		}
 		if strings.TrimSpace(raw) == "specs:" {
-			inSpecs = true
+			inSpecs = section == "GEM"
 			continue
 		}
 		if !inSpecs {
@@ -48,7 +57,8 @@ func (rubyParser) Parse(filename string, content []byte) ([]Dependency, error) {
 		if m == nil {
 			continue
 		}
-		name, version := m[1], m[2]
+		name := m[1]
+		version, _, _ := strings.Cut(m[2], "-") // drop the platform
 		deps = append(deps, Dependency{
 			PURL:      packageurl.NewPackageURL("gem", "", name, version, nil, "").ToString(),
 			Ecosystem: "ruby",

@@ -457,6 +457,53 @@ BUNDLED WITH
 	}
 }
 
+// TestParseGemfileLockSources checks that only the GEM sections are audited
+// (a GIT fork or a PATH gem named like a public gem must not get that gem's
+// advisories) and that a platform-specific version loses its platform.
+func TestParseGemfileLockSources(t *testing.T) {
+	src := `GIT
+  remote: https://github.com/acme/rails.git
+  revision: 0123456789abcdef
+  specs:
+    rails (7.0.4)
+
+PATH
+  remote: vendor/rack
+  specs:
+    rack (2.2.3)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    nokogiri (1.15.4-x86_64-linux)
+      racc (~> 1.4)
+    nokogiri (1.15.4-arm64-darwin)
+      racc (~> 1.4)
+    racc (1.7.1)
+
+PLATFORMS
+  arm64-darwin
+  x86_64-linux
+
+DEPENDENCIES
+  nokogiri
+  rack!
+  rails!
+`
+	deps, err := Parse("Gemfile.lock", []byte(src))
+	if err != nil {
+		t.Fatalf("Parse Gemfile.lock: %v", err)
+	}
+	var got []string
+	for _, d := range deps {
+		got = append(got, d.PURL)
+	}
+	want := []string{"pkg:gem/nokogiri@1.15.4", "pkg:gem/nokogiri@1.15.4", "pkg:gem/racc@1.7.1"}
+	if !slices.Equal(got, want) {
+		t.Errorf("PURLs = %v, want %v", got, want)
+	}
+}
+
 // TestParseComposerLock checks the PURLs (vendor as namespace, "v" prefix
 // dropped, dev branches skipped) and that no package is direct: composer.lock
 // doesn't record what composer.json requires.
