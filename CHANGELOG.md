@@ -107,6 +107,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `audit manifest` and the LSP reported a Yarn 2+ (berry) `yarn.lock`, or a
+  `Gemfile.lock` with CRLF line endings or trailing blanks, as free of
+  vulnerabilities: no package was read from it.
+- npm and Yarn aliases (`string-width-cjs@npm:string-width`) are audited as the
+  real package; workspace, local, git and URL entries are skipped (a workspace
+  package was audited as an unrelated npm package named after its path).
+- Direct dependencies (LSP `secdb/dependencies`): npm marked hoisted packages
+  as direct. Direct now means declared by the project or a workspace
+  (`package-lock.json` v2/v3, Yarn 2+) or listed under `DEPENDENCIES`
+  (`Gemfile.lock`); the formats that don't record it (`package-lock.json` v1,
+  classic `yarn.lock`, `composer.lock`) report none.
 - `--fail-on` was ignored with `--output=sarif` and `--output=csv`: the command
   always exited with status `0`, even with findings at or above the threshold.
 - A vulnerability that has a fix could be hidden as "unfixed" (and so excluded
