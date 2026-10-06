@@ -21,9 +21,9 @@ func (s *Server) didOpen(ctx *glsp.Context, params *protocol.DidOpenTextDocument
 	s.open[uri] = true
 	s.mu.Unlock()
 
-	if _, err := s.auditManifest(ctx, uri, []byte(params.TextDocument.Text)); err != nil {
-		slog.Debug("audit failed", "error", err)
-	}
+	// Through the timer, not inline: glsp handles one message at a time, so an
+	// API call made here would block the server until it returns.
+	s.delayAuditManifest(ctx, uri, []byte(params.TextDocument.Text))
 	return nil
 }
 
