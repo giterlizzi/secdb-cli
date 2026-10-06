@@ -62,7 +62,7 @@ secdb audit manifest --directory ./services --max-depth 3 --fail-on=high
 What gets audited:
 
 - npm, Ruby and Composer: the versions resolved in the lockfile, i.e. what is actually installed.
-- Python: the version written in the requirement. With a range such as `>=2.28` the first version of the range is audited; a requirement without a version is skipped.
+- Python: the version written in the requirement: the exact one (`==2.28.0`), otherwise the lower bound of `>=` or `~=` (`>=2.28` audits 2.28). A requirement with only `!=`, `<`, `<=`, `>`, a wildcard (`==2.*`) or no version is skipped.
 - Maven: a single `pom.xml`. `${...}` properties and the versions in `<dependencyManagement>` are resolved; parent POMs, imported BOMs and transitive dependencies are not, so a dependency whose version comes from them is skipped.
 - Composer platform requirements (`php`, `ext-*`) are skipped.
 
@@ -171,7 +171,7 @@ A finding accepted in the ignore file stays in the report with a `suppressions` 
 secdb audit sbom --file bom.json --output=csv > report.csv
 ```
 
-One row per advisory, with the columns `ID, Title, Severity, CVSS, CVEs, CWEs, Packages, URL, Ignored, Ignore Reason`. CVEs, CWEs and packages are joined with `"; "` in a single cell, and the text cells are quoted as in RFC 4180. `--view` has no effect on it.
+One row per advisory, with the columns `ID, Title, Severity, CVSS, CVEs, CWEs, Packages, URL, Ignored, Ignore Reason`. CVEs, CWEs and packages are joined with `"; "` in a single cell, and the text cells are quoted as in RFC 4180. A cell that starts with `=`, `+`, `-` or `@` gets a leading `'`, so a spreadsheet doesn't run it as a formula. `--view` has no effect on it.
 
 The columns are fixed. A custom layout can be written with `--output=template --template-file my.tmpl`, but note that the template receives the raw API response (one item per package with its `advisories`), not the per-advisory rows of the CSV.
 

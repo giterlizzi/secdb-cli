@@ -139,6 +139,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   new release was announced only from the following run. This affected
   `check-update`, the notice printed after the other commands and the `lsp`
   notification.
+- `requirements.txt`: a specifier that excludes a version or is only an upper
+  bound (`!=1.0`, `<2.0`, `<=2.0`, `>1.0`) was audited as if that version were
+  installed. Only `==`/`===` and the lower bound of `>=`/`~=` are audited now,
+  also when they come after another specifier (`<5,>=4.2`); a wildcard
+  (`==2.*`) is skipped.
+- `check-update` exited with status 0 when the check failed, and ignored
+  `--debug`/`SECDB_DEBUG`.
 - `audit docker --image` failed on images with an `ENTRYPOINT` binary, since
   the package-list commands were passed to it as arguments. The image now runs
   with `/bin/sh` as entrypoint, and without network.
@@ -152,6 +159,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   different host or scheme, `X-API-KEY` was sent to the new location (Go only
   strips `Authorization` and `Cookie`), in clear text after a redirect from
   `https` to `http`. It is now dropped on such redirects.
+- `--output=csv`: a cell starting with `=`, `+`, `-` or `@` (e.g. an advisory
+  title or an ignore reason) could run as a formula when the file was opened
+  in a spreadsheet. Such cells now start with `'`.
 - `golang.org/x/crypto` upgraded to 0.56.0 (GO-2026-6354, GO-2026-6355). It
   comes in through Sprig's bcrypt, which `secdb` doesn't call.
 
