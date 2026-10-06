@@ -4,10 +4,15 @@ here (edit the columns freely, no recompilation needed).
 
 The "csvcell" helper quotes a value per RFC 4180: wrap it in double quotes and
 double any embedded quote, so commas, quotes and newlines in free-text fields
-(titles, ignore reasons) can't break the columns. Numeric/boolean cells are
-emitted bare.
+(titles, ignore reasons) can't break the columns. A value starting with = + - @
+(or a tab/CR) gets a leading ' so a spreadsheet shows it as text instead of
+running it as a formula (CSV injection). Numeric/boolean cells are emitted bare.
 */ -}}
-{{- define "csvcell" -}}"{{ . | toString | replace "\"" "\"\"" }}"{{- end -}}
+{{- define "csvcell" -}}
+{{- $v := . | toString -}}
+{{- if regexMatch "^[=+\\-@\t\r]" $v}}{{$v = print "'" $v}}{{end -}}
+"{{ $v | replace "\"" "\"\"" }}"
+{{- end -}}
 ID,Title,Severity,CVSS,CVEs,CWEs,Packages,URL,Ignored,Ignore Reason
 {{- range .Results}}
 {{template "csvcell" .ID}},{{template "csvcell" .Title}},{{template "csvcell" (.Severity | upper)}},{{if gt .CVSSScore 0.0}}{{.CVSSScore}}{{end}},{{template "csvcell" (join "; " .CVEs)}},{{template "csvcell" (join "; " .CWEs)}},{{template "csvcell" (join "; " .Packages)}},{{template "csvcell" .URL}},{{.Ignored}},{{template "csvcell" .IgnoreReason}}
