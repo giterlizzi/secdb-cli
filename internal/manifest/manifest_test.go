@@ -346,6 +346,32 @@ example ; python_version < "3.8"
 	}
 }
 
+func TestParseRequirements_Specifiers(t *testing.T) {
+	src := `exact==1.0
+compat~=2.2
+ranged<5,>=4.2
+notequal!=1.0
+upper<2.0
+upperinc<=2.0
+greater>1.0
+wildcard==2.*
+url @ https://example.test/url-1.0.tar.gz
+`
+	deps, err := Parse("requirements.txt", []byte(src))
+	if err != nil {
+		t.Fatalf("Parse requirements.txt: %v", err)
+	}
+
+	got := map[string]string{}
+	for _, d := range deps {
+		got[d.Name] = d.Version
+	}
+	want := map[string]string{"exact": "1.0", "compat": "2.2", "ranged": "4.2"}
+	if !maps.Equal(got, want) {
+		t.Errorf("versions = %v, want %v (excluded or upper-bound versions must be skipped)", got, want)
+	}
+}
+
 func TestParseGemfileLock(t *testing.T) {
 	src := `GEM
   remote: https://rubygems.org/

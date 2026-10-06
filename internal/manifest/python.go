@@ -11,16 +11,19 @@ import (
 
 // pythonParser handles requirements*.txt. It's line-based, so every dependency
 // records its source line. "-r"/"-c" includes and option lines are skipped (no
-// cross-file resolution); a dependency is emitted only when the line pins a
-// version.
+// cross-file resolution). The audited version comes from the specifiers (see
+// auditedVersion); a line without a usable one is skipped.
 type pythonParser struct{}
 
 func (pythonParser) Ecosystem() string  { return "python" }
 func (pythonParser) Patterns() []string { return []string{"requirements*.txt"} }
 
-// pyRequirementRe captures the name, an optional "[extras]", a comparison
-// operator, and a version from a requirement line (e.g. "Django[argon2]>=4.2").
-var pyRequirementRe = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*(?:===|==|~=|!=|>=|<=|>|<)?\s*([A-Za-z0-9][A-Za-z0-9.-]*)?`)
+// pyRequirementRe captures the name and the specifiers of a requirement line,
+// dropping the optional "[extras]" (e.g. "Django[argon2]>=4.2,<5").
+var pyRequirementRe = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9._-]*)\s*(?:\[[^\]]*\])?\s*(.*)$`)
+
+// pySpecifierRe captures the operator and the version of one specifier.
+var pySpecifierRe = regexp.MustCompile(`^\s*(===|==|~=|!=|>=|<=|>|<)\s*([A-Za-z0-9][A-Za-z0-9.*+!-]*)\s*$`)
 
 var pep503Re = regexp.MustCompile(`[-_.]+`)
 
@@ -42,11 +45,15 @@ func (pythonParser) Parse(filename string, content []byte) ([]Dependency, error)
 		}
 
 		m := pyRequirementRe.FindStringSubmatch(line)
-		if m == nil || m[2] == "" {
-			continue // no pinned version: nothing auditable
+		if m == nil {
+			continue
+		}
+		version := auditedVersion(m[2])
+		if version == "" {
+			continue // no usable version: nothing auditable
 		}
 
-		name, version := m[1], m[2]
+		name := m[1]
 		deps = append(deps, Dependency{
 			PURL:      packageurl.NewPackageURL("pypi", "", pep503Normalize(name), version, nil, "").ToString(),
 			Ecosystem: "python",
@@ -57,6 +64,30 @@ func (pythonParser) Parse(filename string, content []byte) ([]Dependency, error)
 		})
 	}
 	return deps, nil
+}
+
+// auditedVersion picks the version to audit from comma-separated specifiers:
+// the exact one ("==", "==="), else the lower bound of ">=" or "~=". The other
+// operators ("!=", "<", "<=", ">") name a version that is excluded or only a
+// bound, and a wildcard ("==2.*") isn't a version, so they give nothing on
+// their own.
+func auditedVersion(specifiers string) string {
+	var lowerBound string
+	for spec := range strings.SplitSeq(specifiers, ",") {
+		m := pySpecifierRe.FindStringSubmatch(spec)
+		if m == nil || strings.Contains(m[2], "*") {
+			continue
+		}
+		switch m[1] {
+		case "==", "===":
+			return m[2]
+		case ">=", "~=":
+			if lowerBound == "" {
+				lowerBound = m[2]
+			}
+		}
+	}
+	return lowerBound
 }
 
 // pep503Normalize applies PEP 503 name normalization (runs of "-", "_" and "."
