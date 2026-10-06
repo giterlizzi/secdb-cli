@@ -27,7 +27,7 @@ var pep503Re = regexp.MustCompile(`[-_.]+`)
 func (pythonParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	var deps []Dependency
 
-	for i, raw := range strings.Split(string(content), "\n") {
+	for i, raw := range splitLines(content) {
 		line := raw
 		if idx := strings.Index(line, "#"); idx >= 0 { // inline comment
 			line = line[:idx]

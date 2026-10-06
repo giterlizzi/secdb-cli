@@ -77,8 +77,7 @@ func readYarnEntries(content []byte) []*yarnEntry {
 	var cur *yarnEntry
 	inDeps := false
 
-	for i, raw := range strings.Split(string(content), "\n") {
-		raw = strings.TrimRight(raw, "\r")
+	for i, raw := range splitLines(content) {
 		indent := len(raw) - len(strings.TrimLeft(raw, " \t"))
 		switch {
 		case strings.TrimSpace(raw) == "" || strings.HasPrefix(raw, "#"):

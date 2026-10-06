@@ -382,6 +382,86 @@ DEPENDENCIES
 	}
 }
 
+// TestParseGemfileLockDirectAndCRLF checks that direct means listed under
+// DEPENDENCIES (rack is only needed by rails; "mygem!" is a git/path source) and
+// that a lockfile saved with Windows line endings or with trailing blanks gives
+// the same result: the "\r" (or a trailing space) used to break the spec regex,
+// so such a file audited clean, and the "DEPENDENCIES" heading match.
+func TestParseGemfileLockDirectAndCRLF(t *testing.T) {
+	src := `GEM
+  remote: https://rubygems.org/
+  specs:
+    mygem (0.1.0)
+    rack (2.2.3)
+    rails (7.0.4)
+      rack (>= 2.2)
+
+PLATFORMS
+  ruby
+
+DEPENDENCIES
+  mygem!
+  rails (~> 7.0)
+
+BUNDLED WITH
+   2.4.10
+`
+	want := map[string]bool{ // PURL -> direct
+		"pkg:gem/mygem@0.1.0": true,
+		"pkg:gem/rack@2.2.3":  false,
+		"pkg:gem/rails@7.0.4": true,
+	}
+	for name, eol := range map[string]string{
+		"LF":              "\n",
+		"CRLF":            "\r\n",
+		"trailing blanks": "  \t\n",
+		"CRLF + blanks":   " \r\n",
+	} {
+		deps, err := Parse("Gemfile.lock", []byte(strings.ReplaceAll(src, "\n", eol)))
+		if err != nil {
+			t.Fatalf("%s: Parse Gemfile.lock: %v", name, err)
+		}
+		got := make(map[string]bool, len(deps))
+		for _, d := range deps {
+			got[d.PURL] = d.Direct
+		}
+		if !maps.Equal(got, want) {
+			t.Errorf("%s: PURL -> direct =\n%v\nwant\n%v", name, got, want)
+		}
+	}
+}
+
+// TestParseComposerLock checks the PURLs (vendor as namespace, "v" prefix
+// dropped, dev branches skipped) and that no package is direct: composer.lock
+// doesn't record what composer.json requires.
+func TestParseComposerLock(t *testing.T) {
+	src := `{
+	  "packages": [
+	    {"name": "monolog/monolog", "version": "2.9.1"},
+	    {"name": "psr/log", "version": "v1.1.4"},
+	    {"name": "acme/wip", "version": "dev-main"}
+	  ],
+	  "packages-dev": [
+	    {"name": "phpunit/phpunit", "version": "9.6.13"}
+	  ]
+	}`
+	deps, err := Parse("composer.lock", []byte(src))
+	if err != nil {
+		t.Fatalf("Parse composer.lock: %v", err)
+	}
+	var got []string
+	for _, d := range deps {
+		got = append(got, d.PURL)
+		if d.Direct {
+			t.Errorf("%s is direct, but composer.lock doesn't record it", d.PURL)
+		}
+	}
+	want := []string{"pkg:composer/monolog/monolog@2.9.1", "pkg:composer/psr/log@1.1.4", "pkg:composer/phpunit/phpunit@9.6.13"}
+	if !slices.Equal(got, want) {
+		t.Errorf("PURLs = %v, want %v", got, want)
+	}
+}
+
 func TestParserFor(t *testing.T) {
 	cases := map[string]string{
 		"go.mod":               "go",

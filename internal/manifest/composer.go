@@ -19,7 +19,9 @@ type composerLockPkg struct {
 	Version string `json:"version"`
 }
 
-// composerParser handles PHP composer.lock file.
+// composerParser handles PHP composer.lock file. The lock lists every installed
+// package (packages and packages-dev) but not which ones composer.json requires,
+// so none is reported as direct.
 type composerParser struct{}
 
 func (composerParser) Ecosystem() string  { return "composer" }
@@ -48,7 +50,7 @@ func (composerParser) Parse(filename string, content []byte) ([]Dependency, erro
 				Ecosystem: "composer",
 				Name:      name,
 				Version:   version,
-				Direct:    true,
+				Direct:    false,
 			})
 		}
 	}

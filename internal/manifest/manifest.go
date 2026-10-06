@@ -173,6 +173,19 @@ func tooDeep(root, dir string, maxDepth int) bool {
 	return err == nil && strings.Count(rel, string(os.PathSeparator))+1 > maxDepth
 }
 
+// splitLines splits a line-based manifest into its lines, without the line
+// terminators and the trailing whitespace: a file saved on Windows ("\r\n") or
+// hand-edited with trailing blanks gives the same lines as a clean one. Leading
+// indentation is kept, since some formats (Gemfile.lock, yarn.lock) give it a
+// meaning. Every line-based parser goes through it, so none has to remember.
+func splitLines(content []byte) []string {
+	lines := strings.Split(string(content), "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t\r")
+	}
+	return lines
+}
+
 func lineRange(line int) Range {
 	return Range{Start: Position{Line: line, Column: 1}, End: Position{Line: line, Column: 1}}
 }
