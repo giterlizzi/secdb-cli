@@ -139,8 +139,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   new release was announced only from the following run. This affected
   `check-update`, the notice printed after the other commands and the `lsp`
   notification.
+- `audit docker --image` failed on images with an `ENTRYPOINT` binary, since
+  the package-list commands were passed to it as arguments. The image now runs
+  with `/bin/sh` as entrypoint, and without network.
+- `lsp`: opening a manifest blocked the server until the audit returned (up to
+  the 120 s timeout on a slow API). The audit now runs in the background, like
+  the one after an edit.
 
 ### Security
+
+- The API key could reach another host: after an HTTP redirect to a
+  different host or scheme, `X-API-KEY` was sent to the new location (Go only
+  strips `Authorization` and `Cookie`), in clear text after a redirect from
+  `https` to `http`. It is now dropped on such redirects.
+- `golang.org/x/crypto` upgraded to 0.56.0 (GO-2026-6354, GO-2026-6355). It
+  comes in through Sprig's bcrypt, which `secdb` doesn't call.
 
 - `audit docker` rejects an `--image` or `--container` value starting with
   `-`. The name was never passed through a shell, but docker would parse such

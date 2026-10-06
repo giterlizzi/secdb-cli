@@ -61,7 +61,7 @@ func (o *auditOptions) addFlags(cmd *cobra.Command) {
 	cmd.Flags().BoolVar(&o.notify, "notify", false,
 		"Send the audit result to the configured notification providers")
 	cmd.Flags().StringSliceVar(&o.providers, "providers", nil,
-		"Notification providers to use (comma-separated); default: all configured")
+		"Notification providers to use (comma-separated); default: all")
 	cmd.Flags().StringVar(&o.notifyOn, "notify-on", "high",
 		"Notify only on a vulnerability at or above this severity (critical, high, medium, low, info)")
 }

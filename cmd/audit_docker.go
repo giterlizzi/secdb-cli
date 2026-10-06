@@ -28,7 +28,8 @@ var dockerAuditCmd = &cobra.Command{
 		Exactly one of --image or --container must be given:
 
 		  --image      run the package-list command in a fresh, ephemeral container
-		               of the image ("docker run --rm")
+		               of the image ("docker run --rm", with no network and
+		               /bin/sh in place of the image's entrypoint)
 		  --container  exec the package-list command in a running container
 
 		Only fixed, read-only commands are executed inside the target: reading

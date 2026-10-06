@@ -1,76 +1,51 @@
 # Auditing
 
-The `audit` subcommands check packages against the known vulnerabilities in ZEN SecDB:
+The `audit` subcommands check packages against the vulnerabilities known to ZEN SecDB:
 
 | Command | Audits |
 |---|---|
 | [`audit purl`](#audit-purls) | Package URLs from arguments, a file or stdin |
-| [`audit manifest`](#audit-a-dependency-manifest) | A dependency manifest (`go.mod`, `package-lock.json`, ...) or a whole directory |
+| [`audit manifest`](#audit-a-dependency-manifest) | A dependency manifest (`go.mod`, `package-lock.json`, ...) or every manifest under a directory |
 | [`audit sbom`](#audit-a-cyclonedx-sbom) | A CycloneDX SBOM (JSON) |
-| [`audit linux`](#audit-a-linux-system-experimental) | The installed packages of the local machine or a host over SSH |
+| [`audit linux`](#audit-a-linux-system-experimental) | The installed packages of the local machine or of a host over SSH |
 | [`audit docker`](#audit-a-docker-image-or-container-experimental) | The installed packages of a Docker image or container |
 
-They share the same results pipeline, so [failing the build](#fail-the-build-ci), [SARIF](#sarif-report-eg-for-github-code-scanning) and [CSV](#csv-report-for-spreadsheets) reports, [ignore rules](#ignoring-accepted-risk-findings), [unfixed vulnerabilities](#showing-vulnerabilities-with-no-available-fix) and [notifications](notifications.md) behave the same way for all of them.
+All of them accept the [common options](#common-options): `--view`, `--fail-on`, `--ignore-file`, `--show-unfixed`, the SARIF and CSV output and the [notifications](notifications.md).
 
 ## Audit PURLs
 
-**Simple**
-
 ```bash
+# From arguments
 secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1
-```
 
-**From file**
-
-```bash
+# From a file, one PURL per line ("#" starts a comment)
 secdb audit purl --file=purls.txt
-```
 
-**From STDIN**
-
-```bash
+# From stdin
 secdb audit purl < purls.txt
-```
-
-**From pipe**
-
-```bash
 command | secdb audit purl
 ```
 
-**Using CycloneDX SBOM file (JSON)**
+[Package URLs](https://github.com/package-url/purl-spec) are read from the arguments, else from `--file`/`-f`, else from stdin. Invalid PURLs are skipped and duplicates are removed. For a CycloneDX SBOM use [`audit sbom`](#audit-a-cyclonedx-sbom).
 
-```bash
-syft packages dir:. -o cyclonedx-json > bom.json && secdb audit sbom --file bom.json
-cdxgen -o bom.json . && secdb audit sbom --file bom.json
-```
-
-The `--output=text` report (both `--view` modes) is preceded by a short metadata header: the input source (arguments / `--file` / stdin) and the number of PURLs scanned. The header is text-only; it never appears in `json`/`yaml`/`sarif` output.
-
-Package URLs ([PURLs](https://github.com/package-url/purl-spec)) can be passed as arguments, read from a file with `--file`/`-f` (one PURL per line, `#` for comments), or piped via stdin. For a CycloneDX SBOM use [`audit sbom`](#audit-a-cyclonedx-sbom).
+In `text` output the report starts with a short header: where the PURLs came from (arguments, file or stdin) and how many were scanned. The header is not part of the `json`, `yaml` or `sarif` output.
 
 | Flag | Description |
 |---|---|
-| `-f`, `--file` | Read PURLs from a file instead of arguments/stdin |
-| `--sbom` | *(deprecated, use [`audit sbom --file`](#audit-a-cyclonedx-sbom))* Read PURLs from CycloneDX SBOM file (JSON) |
-| `-v`, `--view` | `summary` *(default)*, one row per package, or `details`, one row per advisory (only applies to `--output=text`) |
-| `--fail-on` | Exit with status `2` if any package has a vulnerability at or above the given severity (`critical`, `high`, `medium`, `low`, `info`) |
-| `--ignore-file` | YAML file of accepted-risk rules that exclude matching findings from `--fail-on` (default `.secdbignore`) |
-| `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
+| `-f`, `--file` | Read the PURLs from a file instead of the arguments or stdin |
+| `--sbom` | *(deprecated, use [`audit sbom --file`](#audit-a-cyclonedx-sbom))* Read the PURLs from a CycloneDX SBOM (JSON) |
 
 ## Audit a dependency manifest
 
-Parse a project's dependency manifest, resolve its packages to PURLs, and audit them against ZEN SecDB. The format is detected from the file name. Pass a single manifest with `--file`, or scan a directory with `--directory` to recursively discover and audit every supported manifest under it.
+Reads a dependency manifest, turns its packages into PURLs and audits them. The format is chosen by file name. Use `--file` for a single manifest, or `--directory` to find and audit every supported manifest under a directory.
 
 ```bash
 secdb audit manifest --file go.mod
 secdb audit manifest --file package-lock.json
 secdb audit manifest --file requirements.txt --view details
 secdb audit manifest --file Gemfile.lock --fail-on=high
-secdb audit manifest --file pom.xml
-secdb audit manifest --file composer.lock
 
-# Discover and audit every manifest under a directory (recursively)
+# Every manifest under a directory
 secdb audit manifest --directory .
 secdb audit manifest --directory ./services --max-depth 3 --fail-on=high
 ```
@@ -84,142 +59,129 @@ secdb audit manifest --directory ./services --max-depth 3 --fail-on=high
 | Java (Maven) | `pom.xml` |
 | PHP (Composer) | `composer.lock` |
 
-For Python range specifiers that aren't an exact version (`>=2.28`), the leading version is audited; entries with no resolvable version (unpinned Python requirements, Maven versions supplied by a parent POM or an imported BOM, Composer platform requirements like `php`/`ext-*`) are skipped. The npm parser uses the lockfiles' resolved versions, so npm findings reflect what's actually installed. The Maven parser reads a single `pom.xml` and resolves `${...}` properties and versions declared in `<dependencyManagement>`, but does not follow parent POMs or transitive dependencies. Results are shaped and rendered exactly like [`audit purl`](#audit-purls): `--view`, `--fail-on`, `--ignore-file`, `--show-unfixed` and `--output=sarif`/`--output=csv` all behave the same way.
+What gets audited:
 
-With `--directory`, discovery prunes noise directories (`.git`, `node_modules`, `vendor`, `target`, `dist`, `build`, `testdata`, ...) and does not follow symlinks; `--max-depth` caps how deep the walk descends. A manifest that fails to parse is skipped with a warning instead of aborting the scan, and all discovered dependencies are audited together in a single report. (With `--output=sarif`, findings from a `--directory` scan are not yet attributed to their individual source files.)
+- npm, Ruby and Composer: the versions resolved in the lockfile, i.e. what is actually installed.
+- Python: the version written in the requirement. With a range such as `>=2.28` the first version of the range is audited; a requirement without a version is skipped.
+- Maven: a single `pom.xml`. `${...}` properties and the versions in `<dependencyManagement>` are resolved; parent POMs, imported BOMs and transitive dependencies are not, so a dependency whose version comes from them is skipped.
+- Composer platform requirements (`php`, `ext-*`) are skipped.
+
+With `--directory`, the walk skips directories such as `.git`, `node_modules`, `vendor`, `target`, `dist`, `build` and `testdata`, and does not follow symlinks. A manifest that can't be parsed is skipped with a warning. All the dependencies found go into a single report.
 
 | Flag | Description |
 |---|---|
-| `-f`, `--file` | Path to a single dependency manifest to audit (mutually exclusive with `--directory`) |
-| `-d`, `--directory` | Directory to recursively discover and audit manifests in (mutually exclusive with `--file`) |
-| `--max-depth` | Max directory depth to descend with `--directory` (`0` = unlimited) |
-| `-v`, `--view` | `summary` *(default)* or `details` (only applies to `--output=text`) |
-| `--fail-on` | Exit with status `2` at or above the given severity |
-| `--ignore-file` | YAML file of accepted-risk rules (default `.secdbignore`) |
-| `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
-
-Support for more manifest formats can be added over time.
+| `-f`, `--file` | The manifest to audit (excludes `--directory`) |
+| `-d`, `--directory` | Audit every manifest under this directory (excludes `--file`) |
+| `--max-depth` | How many directory levels to descend with `--directory` (`0` = no limit) |
 
 ## Audit a CycloneDX SBOM
 
-Extract the PURLs from a CycloneDX BOM (JSON) and audit them against ZEN SecDB. It supersedes the deprecated `audit purl --sbom` (still accepted, with the same output).
+Collects the PURLs of a CycloneDX BOM (JSON), including nested components, and audits them. It replaces `audit purl --sbom`, which still works and gives the same output.
 
 ```bash
 secdb audit sbom --file bom.json
 
-# generate then audit
+# Generate the SBOM, then audit it
 syft packages dir:. -o cyclonedx-json > bom.json && secdb audit sbom --file bom.json
 cdxgen -o bom.json . && secdb audit sbom --file bom.json
-
-# CI (fail on high or critical)
-secdb audit sbom --file bom.json --fail-on=high
-
-# SARIF (e.g. for GitHub Code Scanning)
-secdb audit sbom --file bom.json --output=sarif > results.sarif
 ```
-
-The PURLs are collected from the BOM's `components` (recursively). Results are shaped and rendered exactly like `audit purl`: `--view`, `--fail-on`, `--ignore-file`, `--show-unfixed` and `--output=sarif`/`--output=csv` all behave the same way.
 
 | Flag | Description |
 |---|---|
-| `-f`, `--file` | *(required)* Path to the CycloneDX SBOM (JSON) to audit |
-| `-v`, `--view` | `summary` *(default)* or `details` (only applies to `--output=text`) |
-| `--fail-on` | Exit with status `2` at or above the given severity |
-| `--ignore-file` | YAML file of accepted-risk rules (default `.secdbignore`) |
-| `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
+| `-f`, `--file` | *(required)* The CycloneDX SBOM (JSON) to audit |
 
 ## Audit a Linux system (EXPERIMENTAL)
 
-Audits the installed packages of a Linux host against ZEN SecDB. By default it audits the **local machine** (local auditing is only supported on Linux); it can also target a remote host over SSH. To audit a Docker image or container, use [`audit docker`](#audit-a-docker-image-or-container-experimental).
-
-**Local system**
+Audits the installed packages of a Linux system: the local machine by default (only on Linux), or a remote host over SSH. For Docker images and containers see [`audit docker`](#audit-a-docker-image-or-container-experimental).
 
 ```bash
+# Local machine
 secdb audit linux
-```
 
-**Remote host over SSH**
-
-```bash
+# Remote host
 secdb audit linux --host server.example.com --user ops
-
-# or the ssh:// URI shorthand (user, host and port in one argument)
 secdb audit linux ssh://ops@server.example.com:2222
 ```
 
-The `ssh://user@host:port` argument is a shorthand: the user, host and port it carries override the `--host`/`--user`/`--port` flags, while `--identity-file`/`--ssh-config`/`--sudo` still apply. Uses your system `ssh` client, so `~/.ssh/config`, the SSH agent and `known_hosts` all apply (host-key checking stays enabled).
+The `ssh://user@host:port` argument (the `ssh://` prefix is optional) is a shorthand for `--host`, `--user` and `--port`, and takes precedence over them. The connection uses your `ssh` client, so `~/.ssh/config`, the SSH agent and `known_hosts` apply, and host keys are always checked.
 
-The command runs only fixed, read-only commands on the target: reading `/etc/os-release`, `uname -m`, and the distribution's package-list command (`dpkg-query` / `rpm` / `apk` / Slackware `/var/log/packages`). Supported distributions include Debian/Ubuntu, RHEL/Rocky Linux/AlmaLinux/Oracle Linux/Amazon Linux/Fedora/SUSE, Alpine Linux and Slackware Linux.
+On the target the command runs only read-only commands: `cat /etc/os-release`, `uname -m` and the package list of the distribution (`dpkg-query`, `rpm`, `apk`, or `/var/log/packages` on Slackware). Supported distributions: Debian, Ubuntu, RHEL, Rocky Linux, AlmaLinux, Oracle Linux, Amazon Linux, Fedora, SUSE, Alpine and Slackware.
 
-`--view`, `--fail-on`, `--output=sarif`/`--output=csv`, `--ignore-file` and `--show-unfixed` work exactly as for `audit purl`. The `--output=text` report is preceded by a metadata header showing the target (`local`, `user @ host:port`, or the Docker image/container), OS/version, architecture, and packages scanned. Progress lines (`Detected ...`, `Auditing ...`) are written to stderr only when it's a terminal, so piped/redirected output stays clean.
+The `text` report starts with the target (`local`, `user @ host:port`, or the Docker image or container), the OS and version, the architecture and the number of packages. While it works, the command prints `Detected ...` and `Auditing ...` on stderr, only when stderr is a terminal.
 
 | Flag | Description |
 |---|---|
-| `--host` | Audit a remote host over SSH (default: local machine) |
+| `--host` | Remote host to audit over SSH (default: the local machine) |
 | `--user`, `--port` | SSH user and port |
-| `--identity-file` | SSH identity (private key) file |
-| `--ssh-config` | SSH config file (when set, host-key policy is left to it) |
-| `--sudo` | Prefix the package-list command with `sudo -n` |
-| `-v`, `--view` | `summary` *(default)* or `details` (only applies to `--output=text`) |
-| `--fail-on` | Exit with status `2` at or above the given severity |
-| `--ignore-file` | YAML file of accepted-risk rules (default `.secdbignore`) |
-| `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
+| `--identity-file` | SSH private key |
+| `--ssh-config` | SSH config file; when set, the host key policy is the one in that file |
+| `--sudo` | Run the package list with `sudo -n` |
 
 ## Audit a Docker image or container (EXPERIMENTAL)
 
-Audits the installed packages of a Docker image or container. Provide exactly one of `--image` (run the package-list command in an ephemeral `docker run --rm` container) or `--container` (exec it in a running container). The `docker` CLI must be available and able to reach the daemon.
+Audits the installed packages of a Docker image or of a running container. The `docker` CLI must be installed and able to reach the daemon.
 
 ```bash
 secdb audit docker --image debian:12
 secdb audit docker --container my-running-container
 ```
 
-The same read-only collection, distribution support, and `--view` / `--fail-on` / `--output=sarif` / `--output=csv` / `--ignore-file` / `--show-unfixed` behavior as `audit linux` apply.
+With `--image` the commands run in a temporary container (`docker run --rm`, pulling the image if needed), with no network and with `/bin/sh` in place of the image's entrypoint. With `--container` they run in the existing container (`docker exec`). Commands, supported distributions and report are the same as for `audit linux`.
 
 | Flag | Description |
 |---|---|
-| `--image` | Audit a local Docker image (run ephemerally) |
-| `--container` | Audit a running local Docker container |
-| `-v`, `--view` | `summary` *(default)* or `details` (only applies to `--output=text`) |
-| `--fail-on` | Exit with status `2` at or above the given severity |
-| `--ignore-file` | YAML file of accepted-risk rules (default `.secdbignore`) |
-| `--show-unfixed` | Also report vulnerabilities that have no fix available (hidden by default) |
+| `--image` | Docker image to audit |
+| `--container` | Running Docker container to audit |
+
+Exactly one of the two is required.
 
 ## Common options
 
-### Fail the build (CI)
+| Flag | Description |
+|---|---|
+| `-v`, `--view` | `summary` *(default)*, one row per package, or `details`, one card per advisory. Only for `text` output |
+| `--fail-on` | Exit with status `2` when a vulnerability is at or above this severity (`critical`, `high`, `medium`, `low`, `info`) |
+| `--ignore-file` | YAML file of [accepted risks](#accepted-risks-secdbignore) (default `.secdbignore`) |
+| `--show-unfixed` | Also report the vulnerabilities [with no fix](#vulnerabilities-with-no-fix) |
+| `--notify`, `--providers`, `--notify-on` | Send the result to Slack, Teams or a webhook, see [Notifications](notifications.md) |
 
-Useful in CI pipelines to fail the build when high/critical vulnerabilities are found.
+### Fail the build
 
 ```bash
 secdb audit sbom --file bom.json --fail-on=high
 ```
 
-### SARIF report (e.g. for GitHub Code Scanning)
+The report is printed first, in any output format, then the command exits with status `2` if a vulnerability reaches the threshold. Findings accepted in the ignore file and hidden unfixed vulnerabilities don't count. Any other error exits with `1`.
+
+### SARIF
 
 ```bash
 secdb audit sbom --file bom.json --output=sarif > results.sarif
 ```
 
-Produces a [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) report - one rule/result per (advisory, affected package) pair, with severity, CVEs, CWEs and a CVSS-derived `security-severity` score. The artifact location in the report is the audited file (`audit sbom`, `audit manifest`); a plain PURL list (`audit purl`) has no source file, so it is left empty. A finding matched by `--ignore-file` is still included in the report, but carries a SARIF `suppressions` entry (`kind: external`, `status: accepted`, with the rule's `reason` as justification), so consumers like GitHub Code Scanning don't open a new alert for it.
+Writes a [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) report for GitHub Code Scanning and similar tools: one rule and one result for each (advisory, package) pair, with severity, CVEs, CWEs and a `security-severity` score taken from CVSS.
 
-### CSV report (for spreadsheets)
+Each result points at what was audited: the SBOM file for `audit sbom`, the manifest file and line for `audit manifest` (also with `--directory`), `OS/version` for `audit linux` and `audit docker`. `audit purl` has no file, so the location is empty.
+
+A finding accepted in the ignore file stays in the report with a `suppressions` entry (`kind: external`, `status: accepted`, the rule's `reason` as justification), so Code Scanning doesn't open an alert for it.
+
+### CSV
 
 ```bash
 secdb audit sbom --file bom.json --output=csv > report.csv
 ```
 
-Emits one row per advisory with the columns `ID, Title, Severity, CVSS, CVEs, CWEs, Packages, URL, Ignored, Ignore Reason`. The list columns (CVEs, CWEs, packages) are flattened into a single cell each, joined by `"; "`, and every text field is quoted per RFC 4180 so commas and quotes in titles/reasons don't break the columns. Like `sarif`, the `csv` output always uses the details shape (the `--view` flag doesn't affect it) and is only supported by the `audit` commands.
+One row per advisory, with the columns `ID, Title, Severity, CVSS, CVEs, CWEs, Packages, URL, Ignored, Ignore Reason`. CVEs, CWEs and packages are joined with `"; "` in a single cell, and the text cells are quoted as in RFC 4180. `--view` has no effect on it.
 
-**Tips:** The layout is a Go template, so if you need different columns you can supply your own template instead: `--output=template --template-file my-csv.tmpl`.
+The columns are fixed. A custom layout can be written with `--output=template --template-file my.tmpl`, but note that the template receives the raw API response (one item per package with its `advisories`), not the per-advisory rows of the CSV.
 
-### Ignoring accepted-risk findings
+### Accepted risks (.secdbignore)
 
 ```bash
-secdb audit sbom --file bom.json --fail-on=high --ignore-file=/path-of/.secdbignore
+secdb audit sbom --file bom.json --fail-on=high --ignore-file=path/to/.secdbignore
 ```
 
-`--ignore-file` (default: `.secdbignore`) points to a YAML file of accepted-risk rules. A matching rule never hides a finding from the report; it only excludes it from the `--fail-on` exit-code check (and, for `--output=sarif`, marks the result as suppressed instead of removing it):
+The ignore file (default `.secdbignore` in the current directory, silently skipped when missing) lists the findings you have accepted:
 
 ```yaml
 ignore:
@@ -230,21 +192,31 @@ ignore:
     reason: "Fixed upstream, upgrade planned"
     package:
       name: some-package
-      version: 1.0.0    # optional: without it, the rule matches every version of the package
-    expires: 2026-12-31 # optional: rule stops applying after this date (inclusive, local time)
+      version: 1.0.0    # optional: without it, every version of the package matches
+    expires: 2026-12-31 # optional: the rule applies through this day (local time)
 ```
 
-A rule matches on `vulnerability` (advisory ID or CVE) and, optionally, narrows to a specific `package.name`/`package.version`. It's a no-op if the audit result doesn't already have a matching, non-expired rule. An `expires` value that isn't a valid `YYYY-MM-DD` date is an error: the command stops instead of silently dropping the rule.
+A rule matches an advisory by its ID or by one of its CVEs. With `package` it matches only that package: `name` is compared with the PURL name, without namespace or type, so `name: core` matches both `@angular/core` and `@babel/core`.
 
-### Showing vulnerabilities with no available fix
+An accepted finding is not removed from the report. It is:
 
-An advisory can affect a package for which no fix has been released yet (CSAF remediation status `none_available`). By default these "unfixed" findings are **hidden** from every view (`summary`, `details`, `sarif`, `csv`) and excluded from the `--fail-on` check, so the report focuses on actionable vulnerabilities. When any are hidden, the `--output=text` header shows a warning row with their count:
+- left out of `--fail-on` and of the notifications;
+- marked as suppressed in SARIF, and as `Ignored` in CSV and in the `details` view, with the reason;
+- shown as a hint, instead of an error or warning, by the [editor integration](lsp.md).
+
+The rules are checked per package: when an advisory affects several packages and a rule accepts only some of them, the others still count.
+
+An `expires` that isn't a valid `YYYY-MM-DD` date is an error, so a typo can't silently turn a rule off.
+
+### Vulnerabilities with no fix
+
+Some advisories affect a package for which no fix exists yet (CSAF remediation `none_available`). By default these are hidden from every view (`summary`, `details`, `sarif`, `csv`) and don't count for `--fail-on`. When some are hidden, the `text` header says how many:
 
 ```
 Unfixed: ⚠️ 98 hidden (run with --show-unfixed to list them)
 ```
 
-Pass `--show-unfixed` to include them; in the `details` view each such advisory is marked `Fix: ❌ No fix available for the affected package`.
+`--show-unfixed` includes them; in the `details` view each one is marked `Fix: ❌ No fix available for the affected package`.
 
 ```bash
 secdb audit sbom --file bom.json --show-unfixed

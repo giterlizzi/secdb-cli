@@ -20,7 +20,7 @@ var auditCmd = &cobra.Command{
 		Notifications:
 		  Every audit subcommand can push its result to external destinations with
 		  --notify. Use --providers to pick which ones (comma-separated; default:
-		  all configured), and --notify-on to set the minimum severity that
+		  all), and --notify-on to set the minimum severity that
 		  triggers a notification (critical, high, medium, low, info; default:
 		  high). Delivery is best-effort and never fails the audit.
 

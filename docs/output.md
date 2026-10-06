@@ -1,20 +1,30 @@
 # Output formats
 
-Supports `-o` / `--output`:
+`-o` / `--output` selects the format:
 
 | Format | Description |
 |---|---|
-| `text` *(default)* | Curated Markdown report, rendered with ANSI styling in a terminal, printed raw when piped/redirected |
-| `yaml` | Raw API response as YAML |
-| `json` | Raw API response as JSON |
-| `template` | Custom [Go template](https://pkg.go.dev/text/template) via `--template` (inline) or `--template-file` |
-| `html` | Custom HTML via `--template`/`--template-file`, rendered with `html/template` (safe escaping) |
-| `sarif` | SARIF 2.1.0 report (`audit` commands only, see [Auditing](audit.md#sarif-report-eg-for-github-code-scanning)) |
-| `csv` | CSV of the per-advisory audit details, one row per advisory (`audit` commands only, see [Auditing](audit.md#csv-report-for-spreadsheets)) |
+| `text` *(default)* | A Markdown report, rendered with colors in a terminal and printed as plain Markdown when piped or redirected |
+| `json` | The API response as JSON |
+| `yaml` | The API response as YAML |
+| `template` | Your own [Go template](https://pkg.go.dev/text/template), from `--template` (inline) or `--template-file` |
+| `html` | Like `template`, but executed with `html/template`, which escapes the values for HTML |
+| `sarif` | SARIF 2.1.0, `audit` commands only (see [Auditing](audit.md#sarif)) |
+| `csv` | One row per advisory, `audit` commands only (see [Auditing](audit.md#csv)) |
 
 ```bash
 secdb cve CVE-2021-44228 -o json
 secdb cve CVE-2021-44228 -o template --template '{{.severity}}: {{.score}}'
 ```
 
-Templates have access to [Sprig](https://masterminds.github.io/sprig/) functions (string manipulation, math, lists, dates, ...) in addition to the Go template built-ins. The `env`, `expandenv`, and `getHostByName` functions are disabled to prevent untrusted templates from reading environment variables (e.g. `SECDB_API_KEY`) or exfiltrating data over the network.
+`json`, `yaml`, `template` and `html` all work on the API response (for `cve`, with a few summary fields added: `affected_vendors_summary`, `affected_total`, `not_affected_total`), so a template can use any of its fields; `-o json` shows them.
+
+Templates can use the [Sprig](https://masterminds.github.io/sprig/) functions besides the Go built-ins, except `env`, `expandenv` and `getHostByName`: they are removed so that a template from someone else can't read environment variables (such as `SECDB_API_KEY`) or send them over the network. The CLI also adds:
+
+| Function | Description |
+|---|---|
+| `severity` | A severity as a colored badge, e.g. `🔴 **HIGH**` |
+| `ssvc_decision` | An SSVC decision as a colored badge |
+| `cve_url`, `cwe_url`, `advisory_url` | The ZEN SecDB page of a CVE, CWE or advisory: `{{cve_url "https://secdb.nttzen.cloud" "CVE-2021-44228"}}` |
+
+`NO_COLOR` set to any value prints the `text` output as plain Markdown in a terminal too.

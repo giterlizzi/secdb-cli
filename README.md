@@ -36,9 +36,9 @@ Pre-built binaries for Linux, macOS and Windows (amd64/arm64) are published on t
 | `SECDB_SLACK_WEBHOOK`   | Slack Incoming Webhook URL for `--notify`                               |
 | `SECDB_TEAMS_WEBHOOK`   | Microsoft Teams (Power Automate Workflows) webhook URL for `--notify`   |
 
-`--base-url` overrides the API endpoint (default: `https://secdb.nttzen.cloud/`). It can include a path, e.g. a proxy at `https://gateway.example.com/secdb`.
+`--base-url` changes the API address (default `https://secdb.nttzen.cloud`). It can include a path, e.g. a proxy at `https://gateway.example.com/secdb`.
 
-The links in the output (CVE, CWE and advisory pages, the report footer, the notifications' "view details", the editor diagnostics) point to the ZEN SecDB web GUI, which by default is on the same host as the API. When the API is reached through a proxy, set `--web-url` to the GUI address, so the links don't point to the proxy:
+The links printed by the CLI (CVE, CWE and advisory pages, the report footer, the notifications, the editor diagnostics) go to the ZEN SecDB web interface, which is normally on the API host. If you reach the API through a proxy, set `--web-url` to the web interface address so the links don't point to the proxy:
 
 ```bash
 secdb --base-url https://gateway.example.com/secdb --web-url https://secdb.nttzen.cloud cve CVE-2021-44228
@@ -52,20 +52,20 @@ secdb --base-url https://gateway.example.com/secdb --web-url https://secdb.nttze
 secdb cve CVE-2021-44228
 ```
 
-Renders a curated, human-readable report (CVSS v2/v3/v4, SSVC, EPSS, CISA KEV status, weaknesses, exploit maturity, affected vendors/products and advisories) as Markdown, syntax-highlighted in an interactive terminal.
+Prints the CVE with CVSS v2/v3/v4, SSVC, EPSS, CISA KEV status, weaknesses, exploit maturity, affected vendors and products, and advisories. The report is Markdown, rendered with colors in a terminal.
 
 ![secdb cve example output](docs/cve-example.png)
 
 ### Output formats
 
-`-o` / `--output` selects the format: `text` *(default, a Markdown report rendered in the terminal)*, `json`, `yaml`, `template` and `html` (custom Go templates), plus `sarif` and `csv` for the `audit` commands.
+`-o` / `--output` selects the format: `text` (the default Markdown report), `json`, `yaml`, `template` and `html` (your own Go templates), and `sarif` and `csv` for the `audit` commands.
 
 ```bash
 secdb cve CVE-2021-44228 -o json
 secdb cve CVE-2021-44228 -o template --template '{{.severity}}: {{.score}}'
 ```
 
-See [Output formats](docs/output.md) for the details and the functions available to templates.
+See [Output formats](docs/output.md) for the template functions.
 
 ### Audit packages against known vulnerabilities
 
@@ -88,52 +88,37 @@ secdb audit docker --image debian:12
 secdb audit sbom --file bom.json --fail-on=high --output=sarif > results.sarif
 ```
 
-All the `audit` commands share the same options: `--view summary|details`, `--fail-on`, accepted-risk rules in a `.secdbignore` file, `--show-unfixed`, SARIF and CSV export, and [notifications](docs/notifications.md). See [Auditing](docs/audit.md) for each command, the supported manifests and distributions, and the options.
+All the `audit` commands take the same options: `--view summary|details`, `--fail-on`, accepted risks in a `.secdbignore` file, `--show-unfixed`, SARIF and CSV output, and [notifications](docs/notifications.md). [Auditing](docs/audit.md) covers each command, the supported manifests and distributions.
 
 ### Editor integration (Language Server)
 
-`secdb lsp` starts a [Language Server](https://microsoft.github.io/language-server-protocol/) that audits dependency manifests **as you open and edit them**, reporting known vulnerabilities inline as editor diagnostics. It works with Kate, KDevelop, Sublime Text, Neovim and Zed. See [Editor integration](docs/lsp.md) for the settings and the per-editor configuration.
+`secdb lsp` is a [Language Server](https://microsoft.github.io/language-server-protocol/) that audits the manifests you open in the editor and shows the vulnerabilities on the dependency lines. It works with Kate, KDevelop, Sublime Text, Neovim and Zed; [Editor integration](docs/lsp.md) has the configuration for each.
 
 ### Send notifications
 
-Every `audit` command can post its result to a generic webhook, Slack or Microsoft Teams with `--notify`, e.g. from CI:
+`--notify` sends the result of an `audit` command to a webhook, Slack or Microsoft Teams, e.g. from CI:
 
 ```bash
 SECDB_SLACK_WEBHOOK=https://hooks.slack.com/services/... \
   secdb audit sbom --file bom.json --notify --notify-on=high
 ```
 
-See [Notifications](docs/notifications.md) for the providers, the options and the webhook payload.
+See [Notifications](docs/notifications.md) for the providers and the webhook payload.
 
 ### Calculate SSVC
 
-[Stakeholder-Specific Vulnerability Categorization (SSVC)](https://www.cisa.gov/ssvc-calculator), per the CISA methodology, combines a CVE's exploitation status and technical impact (from ZEN SecDB) with stakeholder-supplied context to produce an actionable decision: `track`, `track*`, `attend`, or `act`.
-
-**Simple**
+[SSVC](https://www.cisa.gov/ssvc-calculator) (Stakeholder-Specific Vulnerability Categorization, from CISA) gives a CVE one of four decisions: `track`, `track*`, `attend` or `act`. ZEN SecDB knows the exploitation status and the technical impact; you supply the other two inputs with the flags below.
 
 ```bash
 secdb ssvc calculate CVE-2021-44228 --mission-prevalence essential --public-well-being-impact material
-```
 
-**Bulk, multiple CVEs**
-
-```bash
+# Several CVEs, from arguments, a file or stdin
 secdb ssvc calculate CVE-2021-44228 CVE-2023-4863 --mission-prevalence support --public-well-being-impact minimal
-```
-
-**From file**
-
-```bash
 secdb ssvc calculate --file cves.txt --mission-prevalence support --public-well-being-impact minimal
-```
-
-**From STDIN**
-
-```bash
 secdb ssvc calculate --mission-prevalence support --public-well-being-impact minimal < cves.txt
 ```
 
-CVE identifiers can be passed as arguments, read from a file with `--file`/`-f` (one CVE per line, `#` for comments), or piped via stdin (same precedence as `audit purl`: arguments, then `--file`, then stdin). Duplicate CVEs are deduplicated; a CVE that can't be found still appears in the report with its status instead of failing the whole batch.
+The CVEs are read from the arguments, else from `--file`/`-f` (one per line, `#` starts a comment), else from stdin. Duplicates are removed, and a CVE that isn't found is listed with its status instead of failing the whole run.
 
 | Flag | Description |
 |---|---|
@@ -147,16 +132,16 @@ CVE identifiers can be passed as arguments, read from a file with `--file`/`-f` 
 secdb check-update
 ```
 
-When a newer release is available, it shows the release notes of every version since the one you have installed (from the project's `CHANGELOG.md`), so you can see what changes before updating. If the notes can't be fetched, it still reports the new version with a link to its release page.
+If a newer release exists, it prints the release notes of the versions after yours, from `CHANGELOG.md`. If the notes can't be downloaded, it prints only the new version and the link to its release page.
 
-A lightweight background check also runs automatically on every command (cooldown: 24h, silent on failure, skipped in CI or with `SECDB_NO_UPDATE_CHECK` set).
+Every command also checks for a new version in the background, at most once a day, and prints a one-line notice when there is one. The check stays silent if it fails, and is skipped in CI or when `SECDB_NO_UPDATE_CHECK` is set.
 
 ## Documentation
 
 - [Auditing](docs/audit.md): the `audit` commands and their options
-- [Editor integration](docs/lsp.md): the `secdb lsp` Language Server
-- [Notifications](docs/notifications.md): `--notify` providers and payload
-- [Output formats](docs/output.md): formats and custom templates
+- [Editor integration](docs/lsp.md): `secdb lsp`
+- [Notifications](docs/notifications.md): `--notify`
+- [Output formats](docs/output.md): formats and templates
 
 ## License
 
