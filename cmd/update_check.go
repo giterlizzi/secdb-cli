@@ -28,7 +28,12 @@ var updateCheckCmd = &cobra.Command{
 		The result is cached locally for 24 hours, so this command may report
 		a cached result instead of hitting the network every time it runs.
 	`),
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error { return nil },
+	// Replaces the root's: no flag or --base-url validation and no background
+	// update check, but the logging setup, so --debug works.
+	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		setupLogging()
+		return nil
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		if meta.Version == "v0.0.0" || !semver.IsValid(meta.Version) {
@@ -39,8 +44,7 @@ var updateCheckCmd = &cobra.Command{
 		isAvailable, releaseInfo, err := update.IsAvailable(meta.Version)
 
 		if err != nil {
-			fmt.Printf("%s\n", err)
-			return nil
+			return fmt.Errorf("update check failed: %w", err)
 		}
 
 		if isAvailable {

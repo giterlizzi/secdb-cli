@@ -43,10 +43,6 @@ var rootCmd = &cobra.Command{
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		apiKey = os.Getenv("SECDB_API_KEY")
 
-		if os.Getenv("SECDB_DEBUG") != "" {
-			debug = true
-		}
-
 		switch outputFormat {
 		case "json", "yaml", "text", "template", "html", "sarif", "csv":
 		default:
@@ -59,13 +55,7 @@ var rootCmd = &cobra.Command{
 		}
 
 		startBackgroundUpdateCheck(cmd)
-
-		level := slog.LevelWarn
-		if debug {
-			level = slog.LevelDebug
-		}
-		logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
-		slog.SetDefault(logger)
+		setupLogging()
 
 		// Validate base URL
 		u, err := client.ValidateBaseURL(baseURL)
@@ -128,6 +118,19 @@ const (
 	groupIntegrations = "integrations"
 	groupOther        = "other"
 )
+
+// setupLogging sends the log to stderr, at debug level with --debug or
+// SECDB_DEBUG (any value), else warnings only.
+func setupLogging() {
+	if os.Getenv("SECDB_DEBUG") != "" {
+		debug = true
+	}
+	level := slog.LevelWarn
+	if debug {
+		level = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
+}
 
 func startBackgroundUpdateCheck(cmd *cobra.Command) {
 	if cmd.Name() != "check-update" && os.Getenv("CI") == "" && os.Getenv("SECDB_NO_UPDATE_CHECK") == "" {
