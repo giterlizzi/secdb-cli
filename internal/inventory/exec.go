@@ -96,10 +96,15 @@ func (t Target) run(cmdStr string) (Result, error) {
 // dockerArgv builds the argv to run cmdStr inside a Docker image or container.
 // The image/container name is a single discrete element, so it is never subject
 // to shell interpretation. Returns nil when the target isn't a Docker target.
+//
+// An image runs with --entrypoint /bin/sh: without it, an image ENTRYPOINT
+// would run with our command as its arguments, failing on a binary entrypoint
+// and executing the image's own code. The container also gets no network, since
+// listing packages needs none.
 func dockerArgv(t Target, cmdStr string) []string {
 	switch {
 	case t.Image != "":
-		return []string{"run", "--rm", t.Image, "/bin/sh", "-c", cmdStr}
+		return []string{"run", "--rm", "--network", "none", "--entrypoint", "/bin/sh", t.Image, "-c", cmdStr}
 	case t.Container != "":
 		return []string{"exec", t.Container, "/bin/sh", "-c", cmdStr}
 	default:
