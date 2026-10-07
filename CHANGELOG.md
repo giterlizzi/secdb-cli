@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-07
+
 ### Added
 
 - In CI, the header of the audit `text` report (summary and details) shows
@@ -295,7 +297,8 @@ Initial public release of the ZEN SecDB CLI.
   and custom `template`/`html` via Go templates.
 - Automatic background update check and a `version` command.
 
-[Unreleased]: https://github.com/giterlizzi/secdb-cli/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/giterlizzi/secdb-cli/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.3.1...v0.4.0
 [0.3.1]: https://github.com/giterlizzi/secdb-cli/compare/v0.3.0...v0.3.1
