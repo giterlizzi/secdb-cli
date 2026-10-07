@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"slices"
 	"strconv"
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
@@ -208,7 +209,7 @@ func writeAuditOutput(cfg auditRenderConfig) error {
 // the command's metadata rows and, when unfixed vulnerabilities were hidden, a
 // warning row that points at --show-unfixed.
 func writeAuditText(cfg auditRenderConfig) error {
-	meta := cfg.meta
+	meta := append(slices.Clone(cfg.meta), ciMeta(ci.Detect())...)
 	if !cfg.opts.showUnfixed {
 		if n := audit.UnfixedCount(cfg.data); n > 0 {
 			meta = append(meta, report.MetaItem{
@@ -232,6 +233,20 @@ func writeAuditText(cfg auditRenderConfig) error {
 		return fmt.Errorf("failed to render details: %w", err)
 	}
 	return nil
+}
+
+// ciMeta returns the text-report header rows describing the CI run the audit
+// is part of (none outside CI): the run summary and a link to it.
+func ciMeta(env ci.Env) []report.MetaItem {
+	summary := env.Summary()
+	if summary == "" {
+		return nil
+	}
+	items := []report.MetaItem{{Label: "CI", Value: summary}}
+	if env.RunURL != "" {
+		items = append(items, report.MetaItem{Label: "CI run", Value: "<" + env.RunURL + ">"})
+	}
+	return items
 }
 
 // failOnError returns the exitError that ends the command with status 2 when

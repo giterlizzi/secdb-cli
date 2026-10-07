@@ -6,6 +6,7 @@ package ci
 import (
 	"fmt"
 	"os"
+	"strings"
 )
 
 // Env is the detected CI environment and its provenance metadata.
@@ -73,4 +74,55 @@ func gitHubEnv() Env {
 		Tag:        tag,
 		Branch:     branch,
 	}
+}
+
+// DisplayName returns the CI name for people ("GitHub Actions", "GitLab CI"),
+// or Name as is for any other CI.
+func (e Env) DisplayName() string {
+	switch e.Name {
+	case "github":
+		return "GitHub Actions"
+	case "gitlab":
+		return "GitLab CI"
+	default:
+		return e.Name
+	}
+}
+
+// ShortCommit returns the commit SHA abbreviated to 7 characters.
+func (e Env) ShortCommit() string {
+	if len(e.Commit) > 7 {
+		return e.Commit[:7]
+	}
+	return e.Commit
+}
+
+// Summary describes the run in one line, e.g. "GitHub Actions, org/repo,
+// main @ 0123456" (a tag reads "tag v1.0.0 @ 0123456"); the parts that aren't
+// known are left out. It is empty outside CI.
+func (e Env) Summary() string {
+	if e.Name == "" {
+		return ""
+	}
+
+	parts := []string{e.DisplayName()}
+	if e.Project != "" {
+		parts = append(parts, e.Project)
+	}
+
+	ref := e.Branch
+	if ref == "" && e.Tag != "" {
+		ref = "tag " + e.Tag
+	}
+	switch commit := e.ShortCommit(); {
+	case commit != "" && ref != "":
+		ref += " @ " + commit
+	case commit != "":
+		ref = commit
+	}
+	if ref != "" {
+		parts = append(parts, ref)
+	}
+
+	return strings.Join(parts, ", ")
 }
