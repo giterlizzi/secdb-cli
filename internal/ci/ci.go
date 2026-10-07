@@ -28,6 +28,12 @@ func Detect() Env {
 	switch {
 	case os.Getenv("GITLAB_CI") != "":
 		return gitLabEnv()
+	case os.Getenv("GITEA_ACTIONS") != "":
+		// Gitea Actions also sets GITHUB_ACTIONS and the GITHUB_* variables,
+		// so it must be checked first.
+		env := gitHubEnv()
+		env.Name = "gitea"
+		return env
 	case os.Getenv("GITHUB_ACTIONS") != "":
 		return gitHubEnv()
 	case os.Getenv("CI") != "":
@@ -51,6 +57,7 @@ func gitLabEnv() Env {
 	}
 }
 
+// gitHubEnv reads the GitHub Actions variables, which Gitea Actions sets too.
 func gitHubEnv() Env {
 	var branch, tag string
 	switch os.Getenv("GITHUB_REF_TYPE") {
@@ -84,6 +91,8 @@ func (e Env) DisplayName() string {
 		return "GitHub Actions"
 	case "gitlab":
 		return "GitLab CI"
+	case "gitea":
+		return "Gitea Actions"
 	default:
 		return e.Name
 	}

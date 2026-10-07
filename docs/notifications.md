@@ -33,7 +33,7 @@ The findings accepted in the [ignore file](audit.md#accepted-risks-secdbignore),
 
 A failed delivery is printed as a warning and doesn't change the exit status, nor stop the other providers. The webhook URL is removed from the error, since it often contains a secret token.
 
-In GitHub Actions and GitLab CI the message also carries the project, branch, commit and author, and its "view details" link opens the CI run. Elsewhere the link opens ZEN SecDB.
+In GitHub Actions, GitLab CI and Gitea Actions the message also carries the project, branch, commit and author, and its "view details" link opens the CI run. Elsewhere the link opens ZEN SecDB.
 
 ## Payload
 

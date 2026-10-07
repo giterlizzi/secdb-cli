@@ -146,7 +146,7 @@ Exactly one of the two is required.
 | `--show-unfixed` | Also report the vulnerabilities [with no fix](#vulnerabilities-with-no-fix) |
 | `--notify`, `--providers`, `--notify-on` | Send the result to Slack, Teams or a webhook, see [Notifications](notifications.md) |
 
-When the audit runs in CI, the header of the `text` report also says where: the CI, the project, the branch or tag with the commit, and a link to the run. Project, branch and link are known for GitHub Actions and GitLab CI; another CI that sets `CI` is shown only by name.
+When the audit runs in CI, the header of the `text` report also says where: the CI, the project, the branch or tag with the commit, and a link to the run. Project, branch and link are known for GitHub Actions, GitLab CI and Gitea Actions; another CI that sets `CI` is shown only by name.
 
 ### Fail the build
 

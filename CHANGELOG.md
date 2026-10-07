@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - In CI, the header of the audit `text` report (summary and details) shows
   the CI, project, branch or tag, commit and a link to the run (GitHub Actions,
-  GitLab CI; any other CI that sets `CI` by name only).
+  GitLab CI, Gitea Actions; any other CI that sets `CI` by name only).
 
 - `--web-url`: the ZEN SecDB web GUI address used for the links in the output
   (CVE/CWE/advisory permalinks, report footer, notifications, LSP diagnostics),
@@ -32,8 +32,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   minimum severity that triggers a notification (default: `high`). Delivery is
   best-effort: a failing or unconfigured provider is reported as a warning and
   never fails the command, and webhook URLs are redacted from every error.
-  Notifications are independent of `--fail-on`. In GitHub Actions and GitLab CI
-  the summary also carries the pipeline context (project, branch, commit, run
+  Notifications are independent of `--fail-on`. In GitHub Actions, GitLab CI and Gitea
+  Actions the summary also carries the pipeline context (project, branch, commit, run
   link), and the "view details" link points to the CI run.
 - `lsp`: the server options can be set from the editor, which matters where the
   editor owns the server command (e.g. Zed). The settings `discovery`,
