@@ -1,9 +1,15 @@
 {{- define "audit-summary" -}}
 {{- $label := .Label -}}
 
+{{- if .Results}}
 | {{$label}} | CVEs | Advisories | Max Severity |
 |---|---|---|---|
 {{- range .Results}}
 | {{.Package}} | {{len .CVEs}} | {{.AdvisoryCount}} | {{.MaxSeverity | severity}} |
 {{- end}}
+{{- else}}
+
+_No vulnerabilities found._
+{{- end}}
+
 {{- end}}

@@ -1,13 +1,3 @@
-{{- /*
-CSV export of the audit details, one row per advisory. The whole layout lives
-here (edit the columns freely, no recompilation needed).
-
-The "csvcell" helper quotes a value per RFC 4180: wrap it in double quotes and
-double any embedded quote, so commas, quotes and newlines in free-text fields
-(titles, ignore reasons) can't break the columns. A value starting with = + - @
-(or a tab/CR) gets a leading ' so a spreadsheet shows it as text instead of
-running it as a formula (CSV injection). Numeric/boolean cells are emitted bare.
-*/ -}}
 {{- define "csvcell" -}}
 {{- $v := . | toString -}}
 {{- if regexMatch "^[=+\\-@\t\r]" $v}}{{$v = print "'" $v}}{{end -}}
