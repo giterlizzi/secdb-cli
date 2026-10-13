@@ -57,6 +57,7 @@ func funcMap() template.FuncMap {
 	fm["cve_url"] = weblink.CVE
 	fm["cwe_url"] = weblink.CWE
 	fm["advisory_url"] = weblink.Advisory
+	fm["path_url"] = weblink.Path
 	return fm
 }
 
