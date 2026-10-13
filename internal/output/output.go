@@ -4,6 +4,7 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -61,9 +62,18 @@ func funcMap() template.FuncMap {
 
 // Render writes data to w in the given format.
 func Render(w io.Writer, data any, format Format, opts Options) error {
-	switch format {
-	case JSON:
+	if format == JSON {
 		return renderJSON(w, data)
+	}
+
+	// yaml and templates see the data as -o json shows it, with the API's
+	// field names (.base_score, .purl), not the Go ones (.BaseScore, .PURL):
+	// yaml.v3 ignores the json tags and a template reads the Go fields.
+	data, err := jsonValue(data)
+	if err != nil {
+		return err
+	}
+	switch format {
 	case YAML:
 		return renderYAML(w, data)
 	case Template:
@@ -73,6 +83,20 @@ func Render(w io.Writer, data any, format Format, opts Options) error {
 	default:
 		return fmt.Errorf("unknown renderer: %q (json, yaml, template, html)", format)
 	}
+}
+
+// jsonValue returns data as the generic value (maps, slices, strings, float64,
+// ...) its JSON encoding decodes to.
+func jsonValue(data any) (any, error) {
+	b, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("JSON encode: %w", err)
+	}
+	var v any
+	if err := json.Unmarshal(b, &v); err != nil {
+		return nil, fmt.Errorf("JSON decode: %w", err)
+	}
+	return v, nil
 }
 
 // SeverityMarkdown returns a colored emoji badge for a severity, for text/Markdown output.

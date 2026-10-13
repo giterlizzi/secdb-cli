@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `-o yaml`, `-o template` and `-o html` use the API field names, as `-o json`
+  shows them, for every command: before, `audit` and `ssvc calculate` exposed
+  the Go names to templates (`{{.PURL}}` instead of `{{.purl}}`) and lowercased
+  them in YAML (`basescore` instead of `base_score`).
+
 ## [0.6.0] - 2026-10-07
 
 ### Added
