@@ -58,7 +58,33 @@ func funcMap() template.FuncMap {
 	fm["cwe_url"] = weblink.CWE
 	fm["advisory_url"] = weblink.Advisory
 	fm["path_url"] = weblink.Path
+	// Sprig's abbrev and trunc count bytes and can cut a character in two.
+	fm["abbrev"] = abbrev
+	fm["trunc"] = trunc
 	return fm
+}
+
+// abbrev is Sprig's abbrev counting characters, not bytes: s cut to width
+// characters, the last three replaced by "...". A width under 4 leaves s as is.
+func abbrev(width int, s string) string {
+	r := []rune(s)
+	if width < 4 || len(r) <= width {
+		return s
+	}
+	return string(r[:width-3]) + "..."
+}
+
+// trunc is Sprig's trunc counting characters, not bytes: the first n
+// characters of s, or the last -n when n is negative.
+func trunc(n int, s string) string {
+	r := []rune(s)
+	switch {
+	case n >= 0 && len(r) > n:
+		return string(r[:n])
+	case n < 0 && len(r) > -n:
+		return string(r[len(r)+n:])
+	}
+	return s
 }
 
 // Render writes data to w in the given format.
