@@ -7,12 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `secdb search`: full-text search across ZEN SecDB (CVEs, CWEs, advisories,
+  NASL plugins, ExploitDB entries), narrowed by record type (`--type`, a
+  comma-separated list) and last-modified window (`--since 30d`), paged with
+  `--page`/`--per-page`. The `text` output links each result to the web GUI and
+  ends with the totals by type and severity; `json`/`yaml`/`template` print the
+  results with their API field names, the counts by type, severity and source,
+  and a `pagination` object.
+- Template function `path_url`, the web-GUI link for a path returned by the API
+  (such as a search hit's `web_url`).
+
 ### Fixed
 
 - `-o yaml`, `-o template` and `-o html` use the API field names, as `-o json`
   shows them, for every command: before, `audit` and `ssvc calculate` exposed
   the Go names to templates (`{{.PURL}}` instead of `{{.purl}}`) and lowercased
   them in YAML (`basescore` instead of `base_score`).
+- The `text` output drops the control characters found in the data (titles and
+  descriptions come from third-party feeds), so an escape sequence in a record
+  can no longer reach the terminal.
+- The template functions `abbrev` and `trunc` count characters, not bytes, so
+  they no longer cut a multi-byte character in two.
 
 ## [0.6.0] - 2026-10-07
 

@@ -17,7 +17,7 @@ secdb cve CVE-2021-44228 -o json
 secdb cve CVE-2021-44228 -o template --template '{{.severity}}: {{.score}}'
 ```
 
-`json`, `yaml`, `template` and `html` all work on the API response (for `cve`, with a few summary fields added: `affected_vendors_summary`, `affected_total`, `not_affected_total`), so a template can use any of its fields; `-o json` shows them.
+`json`, `yaml`, `template` and `html` all work on the API response (for `cve`, with a few summary fields added: `affected_vendors_summary`, `affected_total`, `not_affected_total`; for `search`, a `pagination` object), so a template can use any of its fields; `-o json` shows them.
 
 Templates can use the [Sprig](https://masterminds.github.io/sprig/) functions besides the Go built-ins, except `env`, `expandenv` and `getHostByName`: they are removed so that a template from someone else can't read environment variables (such as `SECDB_API_KEY`) or send them over the network. The CLI also adds:
 
@@ -26,5 +26,6 @@ Templates can use the [Sprig](https://masterminds.github.io/sprig/) functions be
 | `severity` | A severity as a colored badge, e.g. `🔴 **HIGH**` |
 | `ssvc_decision` | An SSVC decision as a colored badge |
 | `cve_url`, `cwe_url`, `advisory_url` | The ZEN SecDB page of a CVE, CWE or advisory: `{{cve_url "https://secdb.nttzen.cloud" "CVE-2021-44228"}}` |
+| `path_url` | A ZEN SecDB page from a path the API returns, such as a search hit's `web_url`: `{{path_url "https://secdb.nttzen.cloud" .web_url}}` |
 
 `NO_COLOR` set to any value prints the `text` output as plain Markdown in a terminal too.

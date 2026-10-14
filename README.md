@@ -56,6 +56,14 @@ Prints the CVE with CVSS v2/v3/v4, SSVC, EPSS, CISA KEV status, weaknesses, expl
 
 ![secdb cve example output](docs/cve-example.png)
 
+### Search
+
+```bash
+secdb search log4j --type cve,advisory --since 30d
+```
+
+Full-text search across CVEs, CWEs, advisories, NASL plugins and ExploitDB entries, with links to the ZEN SecDB web GUI. See [Search](docs/search.md) for the query syntax and paging.
+
 ### Output formats
 
 `-o` / `--output` selects the format: `text` (the default Markdown report), `json`, `yaml`, `template` and `html` (your own Go templates), and `sarif` and `csv` for the `audit` commands.
@@ -142,6 +150,7 @@ Every command also checks for a new version in the background, at most once a da
 - [Editor integration](docs/lsp.md): `secdb lsp`
 - [Notifications](docs/notifications.md): `--notify`
 - [Output formats](docs/output.md): formats and templates
+- [Search](docs/search.md): `secdb search`, query syntax and paging
 
 ## License
 
