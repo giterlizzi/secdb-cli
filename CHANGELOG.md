@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The template functions `abbrev` and `trunc` count characters, not bytes, so
   they no longer cut a multi-byte character in two.
 
+### Security
+
+- Built with Go 1.26.9 and `golang.org/x/net` v0.60.0, which fix
+  vulnerabilities in `net/http`, HTTP/2, `crypto/tls` and `html/template`.
+
 ## [0.6.0] - 2026-10-07
 
 ### Added
