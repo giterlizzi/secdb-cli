@@ -1,0 +1,11 @@
+{{- define "search-hit" -}}
+{{- $h := .Hit -}}
+{{- $date := $h.Modified }}{{ if not $date }}{{ $date = $h.Published }}{{ end -}}
+- {{ with $h.Severity }}{{ . | severity }} {{ end }}{{ $h.Type | upper }} `{{ $h.ID }}`{{ with $h.Alias }} ({{ . }}){{ end }}{{ if $h.KEV }} 🔥 **KEV**{{ end }}{{ with $h.Title }}: {{ . }}{{ end }}
+{{- with $h.Description }}
+  {{ regexReplaceAll "\\s+" . " " | trim | abbrev 160 }}
+{{- end }}
+{{- if or $date $h.WebURL }}
+  {{ with $date }}_{{ trunc 10 . }}_{{ end }}{{ if and $date $h.WebURL }} · {{ end }}{{ with $h.WebURL }}{{ path_url $.BaseURL . }}{{ end }}
+{{- end }}
+{{- end -}}

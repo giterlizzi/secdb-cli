@@ -1,0 +1,23 @@
+# Search Results
+
+{{- if not .Hits }}
+
+_No results found._
+{{- else }}
+{{- $baseURL := .BaseURL }}
+{{ range .Hits }}
+{{ template "search-hit" (dict "Hit" . "BaseURL" $baseURL) }}
+{{- end }}
+
+---
+
+_{{ len .Hits }} shown{{ with .Pagination.Total }} of {{ . }}{{ end }}{{ if gt .Pagination.TotalPages 1 }}, page {{ .Pagination.Page }} of {{ .Pagination.TotalPages }}{{ end }}{{ with .Pagination.NextPage }} (next: `--page {{ . }}`){{ end }}_
+{{- with .Types }}
+
+**By type:** {{ range $i, $f := . }}{{ if $i }}, {{ end }}{{ $f.Name }} {{ $f.Count }}{{ end }}
+{{- end }}
+{{- with .Severities }}
+
+**By severity:** {{ range $i, $f := . }}{{ if $i }}, {{ end }}{{ $f.Name }} {{ $f.Count }}{{ end }}
+{{- end }}
+{{- end }}
