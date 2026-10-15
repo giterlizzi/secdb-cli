@@ -5,15 +5,12 @@ package audit
 
 import (
 	"cmp"
-	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/giterlizzi/secdb-cli/internal/client"
-	"github.com/giterlizzi/secdb-cli/internal/report"
 )
 
 // PackageResult is the per-package summary row (--view=summary).
@@ -45,6 +42,51 @@ type AdvisoryResult struct {
 	Unfixed      bool
 }
 
+// Result is an audit shaped for every output, computed once by Analyze: the
+// API items as they came (json/yaml/template), the advisories (details view,
+// SARIF, CSV, notifications), the per-package rows (summary view) and the
+// figures for --fail-on, --notify-on and the text header.
+type Result struct {
+	Items      []client.AuditItem
+	Advisories []AdvisoryResult // most severe first
+	Packages   []PackageResult
+
+	// Overall is the highest severity of the advisories that are neither
+	// ignored nor hidden as unfixed ("" when there are none).
+	Overall string
+
+	// Unfixed is how many advisories have no fix available, counted whether
+	// or not they are shown (--show-unfixed).
+	Unfixed int
+
+	// Ignored is how many advisories an ignore rule accepts for every
+	// affected package; PartlyIgnored, for some of them only.
+	Ignored, PartlyIgnored int
+}
+
+// Analyze shapes the items of an /audit/* response. Unless showUnfixed, an
+// advisory with no fix available for the audited package is left out of
+// Advisories, Packages and Overall. An advisory the ignore file accepts stays
+// in Advisories, marked, but doesn't count for Overall.
+func Analyze(items []client.AuditItem, ignore *IgnoreFile, showUnfixed bool) Result {
+	res := Result{
+		Items:      items,
+		Advisories: groupByAdvisory(items, ignore, showUnfixed),
+		Packages:   summarizePackages(items, showUnfixed),
+		Overall:    overallSeverity(items, ignore, showUnfixed),
+		Unfixed:    unfixedCount(items),
+	}
+	for _, a := range res.Advisories {
+		switch {
+		case a.Ignored:
+			res.Ignored++
+		case len(a.IgnoredPURLs) > 0:
+			res.PartlyIgnored++
+		}
+	}
+	return res
+}
+
 // SeverityLevels ranks the canonical severities (see NormalizeSeverity) so they
 // can be compared and sorted; "" (no severity) ranks lowest.
 var SeverityLevels = map[string]int{
@@ -74,9 +116,7 @@ func NormalizeSeverity(severity string) string {
 }
 
 // hideUnfixed reports whether adv must be hidden from the audit output for
-// purl: an unfixed advisory is hidden unless showUnfixed is set. It centralizes
-// the default-hide-unfixed rule (and its debug log) shared by
-// SummarizePURLAudit, GroupByAdvisory and OverallSeverity.
+// purl: an unfixed advisory is hidden unless showUnfixed is set.
 func hideUnfixed(purl string, adv client.Advisory, showUnfixed bool) bool {
 	if !showUnfixed && IsUnfixed(purl, adv) {
 		slog.Debug("unfixed", "purl", purl, "advisory", adv.ID)
@@ -107,9 +147,9 @@ func latestCVSSScore(adv client.Advisory) float64 {
 	return score
 }
 
-// OverallSeverity returns the highest severity across the results, skipping
+// overallSeverity returns the highest severity across the results, skipping
 // ignored and (unless showUnfixed) unfixed advisories.
-func OverallSeverity(results []client.AuditItem, ignoreFile *IgnoreFile, showUnfixed bool) string {
+func overallSeverity(results []client.AuditItem, ignoreFile *IgnoreFile, showUnfixed bool) string {
 	overall := ""
 	for _, r := range results {
 		for _, adv := range r.Advisories {
@@ -134,8 +174,8 @@ func maxSeverity(a, b string) string {
 	return a
 }
 
-// SummarizePURLAudit shapes the results into one summary row per package.
-func SummarizePURLAudit(results []client.AuditItem, showUnfixed bool) []PackageResult {
+// summarizePackages shapes the results into one summary row per package.
+func summarizePackages(results []client.AuditItem, showUnfixed bool) []PackageResult {
 	out := make([]PackageResult, 0, len(results))
 	for _, r := range results {
 		// A package whose advisories were all filtered out (e.g. all unfixed) is
@@ -177,11 +217,11 @@ func sortedDesc(set map[string]bool) []string {
 	return out
 }
 
-// GroupByAdvisory shapes the results into one row per advisory (severity-sorted),
+// groupByAdvisory shapes the results into one row per advisory (severity-sorted),
 // annotating each with its affected packages and ignore/unfixed status.
-func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnfixed bool) report.Report {
+func groupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnfixed bool) []AdvisoryResult {
 	byID := make(map[string]*AdvisoryResult)
-	var grouped []*AdvisoryResult // first-seen order, sorted by advisoryReport
+	var grouped []*AdvisoryResult // first-seen order, sorted below
 
 	for _, r := range results {
 		for _, adv := range r.Advisories {
@@ -199,7 +239,16 @@ func GroupByAdvisory(results []client.AuditItem, ignoreFile *IgnoreFile, showUnf
 			res.addPackage(r, adv, showUnfixed && IsUnfixed(r.PURL, adv), ignoreFile)
 		}
 	}
-	return advisoryReport(grouped)
+
+	out := make([]AdvisoryResult, 0, len(grouped))
+	for _, res := range grouped {
+		if len(res.IgnoredPURLs) > 0 && res.ignoredForAll() {
+			res.Ignored, res.IgnoreReason = true, res.IgnoredPURLs[res.PURLs[0]]
+		}
+		out = append(out, *res)
+	}
+	sortAdvisories(out)
+	return out
 }
 
 // addPackage records an affected package on the grouped row, with its unfixed
@@ -233,31 +282,6 @@ func newAdvisoryResult(adv client.Advisory) *AdvisoryResult {
 	}
 }
 
-// advisoryReport finalizes the grouped advisories: it resolves each one's
-// whole-advisory ignore status, sorts them and adds the "Ignored" header row.
-func advisoryReport(grouped []*AdvisoryResult) report.Report {
-	var full, partial int
-	out := make([]AdvisoryResult, 0, len(grouped))
-	for _, res := range grouped {
-		switch {
-		case len(res.IgnoredPURLs) == 0:
-		case res.ignoredForAll():
-			res.Ignored, res.IgnoreReason = true, res.IgnoredPURLs[res.PURLs[0]]
-			full++
-		default:
-			partial++
-		}
-		out = append(out, *res)
-	}
-	sortAdvisories(out)
-
-	rep := report.Report{Results: out}
-	if item, ok := ignoredMeta(full, partial); ok {
-		rep.AddMeta(item)
-	}
-	return rep
-}
-
 // sortAdvisories orders the advisories most severe first (then higher CVSS,
 // then ID), so the details view leads with what matters; ties keep a stable,
 // deterministic order.
@@ -269,23 +293,6 @@ func sortAdvisories(out []AdvisoryResult) {
 			cmp.Compare(a.ID, b.ID),
 		)
 	})
-}
-
-// ignoredMeta is the text header's "Ignored" row: the fully ignored advisories,
-// plus those accepted for some packages only (false when there are none).
-func ignoredMeta(full, partial int) (report.MetaItem, bool) {
-	var value string
-	switch {
-	case full == 0 && partial == 0:
-		return report.MetaItem{}, false
-	case partial == 0:
-		value = strconv.Itoa(full)
-	case full == 0:
-		value = fmt.Sprintf("%d for some packages only", partial)
-	default:
-		value = fmt.Sprintf("%d (+%d for some packages only)", full, partial)
-	}
-	return report.MetaItem{Label: "Ignored", Value: value}, true
 }
 
 // IgnoredFor reports whether an ignore rule accepts the advisory for purl, and
@@ -311,11 +318,10 @@ func (a AdvisoryResult) ignoredForAll() bool {
 	return len(a.PURLs) > 0
 }
 
-// UnfixedCount returns how many advisories are hidden because no fix is
-// available for the audited package (remediation "none_available"). An
-// advisory is counted once even when several audited packages reference it. It
-// lets the caller warn that findings were hidden and hint at --show-unfixed.
-func UnfixedCount(results []client.AuditItem) int {
+// unfixedCount returns how many advisories have no fix available for the
+// audited package (remediation "none_available"). An advisory is counted once
+// even when several audited packages reference it.
+func unfixedCount(results []client.AuditItem) int {
 	seen := make(map[string]bool)
 	for _, r := range results {
 		for _, adv := range r.Advisories {

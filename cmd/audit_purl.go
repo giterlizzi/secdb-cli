@@ -78,8 +78,9 @@ var purlAuditCmd = &cobra.Command{
 			return err
 		}
 
-		return runPURLAudit(purls, &purlOpts.audit, auditRenderConfig{
-			source: purlOpts.sbom,
+		return runPURLAudit(purls, &purlOpts.audit, auditTarget{
+			source:    source,
+			sarifFile: purlOpts.sbom,
 			meta: []report.MetaItem{
 				{Label: "Source", Value: source},
 				{Label: "PURLs scanned", Value: strconv.Itoa(len(purls))},

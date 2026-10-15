@@ -16,19 +16,33 @@ import (
 	"github.com/owenrumney/go-sarif/v3/pkg/report/v210/sarif"
 )
 
-// WriteSARIF writes the advisories as a SARIF 2.1.0 report, attributing each
-// finding to its source file/line when known via sources.
-func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, sourceFile string, sources map[string]SourceLocation) error {
+// SARIFOptions describes the audited source of a SARIF report.
+type SARIFOptions struct {
+	// AutomationID identifies the kind of analysis, e.g. "secdb-cli/audit-purl"
+	// (GitHub Code Scanning groups the alerts by it).
+	AutomationID string
+
+	// File is the artifact location of every finding (the SBOM, the OS), unless
+	// Sources has the finding's PURL.
+	File string
+
+	// Sources maps a PURL to the manifest file and line that declares it.
+	Sources map[string]SourceLocation
+}
+
+// WriteSARIF writes the advisories as a SARIF 2.1.0 report, one result per
+// (advisory, package), located as opts says.
+func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, opts SARIFOptions) error {
 	sarifReport := report.NewV210Report()
 
 	run := sarif.NewRunWithInformationURI("secdb-cli", meta.RepoURL)
 	run.Tool.Driver.WithVersion(meta.Version)
-	run.AutomationDetails = sarif.NewRunAutomationDetails().WithID("secdb-cli/audit-purl")
+	run.AutomationDetails = sarif.NewRunAutomationDetails().WithID(opts.AutomationID)
 
 	for _, adv := range advisories {
 		for _, purl := range adv.PURLs {
-			file, line := sourceFile, 0
-			if loc, ok := sources[purl]; ok {
+			file, line := opts.File, 0
+			if loc, ok := opts.Sources[purl]; ok {
 				file, line = loc.File, loc.Line
 			}
 			addFinding(run, adv, purl, file, line)

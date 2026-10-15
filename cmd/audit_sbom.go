@@ -60,10 +60,12 @@ var sbomAuditCmd = &cobra.Command{
 			return fmt.Errorf("no PURLs found in %s", sbomOpts.file)
 		}
 
-		return runPURLAudit(purls, &sbomOpts.audit, auditRenderConfig{
-			source: sbomOpts.file,
+		source := "SBOM (" + sbomOpts.file + ")"
+		return runPURLAudit(purls, &sbomOpts.audit, auditTarget{
+			source:    source,
+			sarifFile: sbomOpts.file,
 			meta: []report.MetaItem{
-				{Label: "Source", Value: "SBOM (" + sbomOpts.file + ")"},
+				{Label: "Source", Value: source},
 				{Label: "PURLs scanned", Value: strconv.Itoa(len(purls))},
 			},
 		})

@@ -90,10 +90,12 @@ var manifestAuditCmd = &cobra.Command{
 			return fmt.Errorf("no auditable dependencies found in %s", manifestOpts.source())
 		}
 
-		return runPURLAudit(purls, &manifestOpts.audit, auditRenderConfig{
-			sources: sources,
+		source := fmt.Sprintf("manifest (%s)", manifestOpts.source())
+		return runPURLAudit(purls, &manifestOpts.audit, auditTarget{
+			source:       source,
+			sarifSources: sources,
 			meta: []report.MetaItem{
-				{Label: "Source", Value: fmt.Sprintf("manifest (%s)", manifestOpts.source())},
+				{Label: "Source", Value: source},
 				{Label: "Dependencies scanned", Value: strconv.Itoa(len(purls))},
 			},
 		})
