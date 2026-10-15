@@ -19,6 +19,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Template function `path_url`, the web-GUI link for a path returned by the API
   (such as a search hit's `web_url`).
 
+### Changed
+
+- The SARIF report of `audit linux` and `audit docker` has its own automation
+  ID, `secdb-cli/audit-linux` (it was `secdb-cli/audit-purl`, as for the
+  PURL-based audits): GitHub Code Scanning shows their alerts in a separate
+  category.
+- `audit linux` over SSH runs `ssh -vvv` with `--debug` (or `SECDB_DEBUG`), so
+  the connection log shows up in the debug output.
+
 ### Fixed
 
 - `-o yaml`, `-o template` and `-o html` use the API field names, as `-o json`
