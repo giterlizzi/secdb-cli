@@ -16,7 +16,7 @@ func (a AdvisoryResult) Findings() []finding.Finding {
 		Description: a.Description,
 		CVEs:        a.CVEs,
 		CWEs:        a.CWEs,
-		CVSSScore:   a.CVSSScore, // TODO
+		CVSSScore:   a.CVSSScore,
 	}
 	if a.URL != "" {
 		base.References = []string{a.URL}
