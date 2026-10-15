@@ -32,6 +32,10 @@ type globalOptions struct {
 	output       string
 	template     string
 	templateFile string
+	jq           string
+
+	// jqQuery is the compiled --jq, set by validate.
+	jqQuery *output.JQ
 }
 
 var global globalOptions
@@ -72,13 +76,32 @@ func (g *globalOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&g.templateFile, "template-file", "",
 		"External template path file, with --output=template or --output=html")
 
+	cmd.PersistentFlags().StringVar(&g.jq, "jq", "",
+		"Filter the JSON output with a jq expression (implies --output=json), e.g. '.hits[].id'")
+
 	cmd.PersistentFlags().BoolVar(&g.debug, "debug", false,
 		"Enable debug logging to stderr")
 }
 
-// validate checks the --output format against the command and normalizes
-// --base-url and --web-url, before any API call.
+// validate checks --jq and the --output format against the command and
+// normalizes --base-url and --web-url, before any API call.
 func (g *globalOptions) validate(cmd *cobra.Command) error {
+	// --jq filters the JSON output: it selects -o json, and conflicts with any
+	// other format given explicitly. A bad expression fails here, before any
+	// API call.
+	if g.jq != "" {
+		if cmd.Flags().Changed("output") && g.output != "json" {
+			return fmt.Errorf("--jq filters the JSON output: it can't be used with --output=%s", g.output)
+		}
+		g.output = "json"
+
+		q, err := output.ParseJQ(g.jq)
+		if err != nil {
+			return err
+		}
+		g.jqQuery = q
+	}
+
 	switch g.output {
 	case "json", "yaml", "text", "template", "html", "sarif", "csv":
 	default:
@@ -119,6 +142,7 @@ func (g *globalOptions) validate(cmd *cobra.Command) error {
 		"output", g.output,
 		"template", g.template,
 		"template_file", g.templateFile,
+		"jq", g.jq,
 	)
 	return nil
 }
@@ -132,12 +156,13 @@ func (g *globalOptions) newClient() *client.Client {
 	})
 }
 
-// outputOptions returns the template options of the json/yaml/template/html
-// renderers.
+// outputOptions returns the options of the json/yaml/template/html renderers:
+// the user template and the compiled --jq.
 func (g *globalOptions) outputOptions() output.Options {
 	return output.Options{
 		TemplateExpression: g.template,
 		TemplateFile:       g.templateFile,
+		JQ:                 g.jqQuery,
 	}
 }
 

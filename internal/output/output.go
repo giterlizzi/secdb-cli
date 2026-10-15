@@ -27,10 +27,14 @@ const (
 	YAML     Format = "yaml"
 )
 
-// Options holds renderer options for the template/HTML formats.
+// Options holds renderer options: the user template (template/html formats)
+// and the --jq expression (json format).
 type Options struct {
 	TemplateFile       string
 	TemplateExpression string
+
+	// JQ, when set, filters the json output (see ParseJQ).
+	JQ *JQ
 }
 
 // SourceLocation maps a PURL to the manifest file and line it came from, for
@@ -89,18 +93,20 @@ func trunc(n int, s string) string {
 
 // Render writes data to w in the given format.
 func Render(w io.Writer, data any, format Format, opts Options) error {
-	if format == JSON {
+	if format == JSON && opts.JQ == nil {
 		return renderJSON(w, data)
 	}
 
-	// yaml and templates see the data as -o json shows it, with the API's
-	// field names (.base_score, .purl), not the Go ones (.BaseScore, .PURL):
-	// yaml.v3 ignores the json tags and a template reads the Go fields.
+	// yaml, templates and --jq see the data as -o json shows it, with the
+	// API's field names (.base_score, .purl), not the Go ones (.BaseScore,
+	// .PURL): yaml.v3 ignores the json tags and a template reads the Go fields.
 	data, err := jsonValue(data)
 	if err != nil {
 		return err
 	}
 	switch format {
+	case JSON:
+		return opts.JQ.write(w, data)
 	case YAML:
 		return renderYAML(w, data)
 	case Template:

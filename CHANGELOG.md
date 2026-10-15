@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a `pagination` object.
 - Template function `path_url`, the web-GUI link for a path returned by the API
   (such as a search hit's `web_url`).
+- `--jq <expression>`: filter the JSON output of any command with a jq
+  expression, without installing `jq` (e.g. `secdb search log4shell --jq
+  '.hits[].id'`). It implies `--output=json`; strings are printed without
+  quotes, one result per line, and an invalid expression fails before the API
+  call.
 
 ### Changed
 
