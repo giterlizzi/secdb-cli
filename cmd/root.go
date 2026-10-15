@@ -206,6 +206,25 @@ func printUpdateNoticeIfReady() {
 	}
 }
 
+// exactArgs is cobra.ExactArgs with a message of our own: it requires exactly
+// n positional arguments.
+func exactArgs(n int, message string) cobra.PositionalArgs {
+	return func(cmd *cobra.Command, args []string) error {
+		if len(args) != n {
+			return errors.New(message)
+		}
+		return nil
+	}
+}
+
+// statusf writes a progress message to stderr, only when stderr is a terminal:
+// it never mixes with the result on stdout, nor clutters a CI log.
+func statusf(format string, args ...any) {
+	if term.IsTerminal(int(os.Stderr.Fd())) {
+		fmt.Fprintf(os.Stderr, format, args...)
+	}
+}
+
 // exitError is returned by a command that must end with a specific exit
 // status (e.g. --fail-on → 2) after writing its output. Commands return it
 // instead of calling os.Exit, so Execute still prints the update notice, and a

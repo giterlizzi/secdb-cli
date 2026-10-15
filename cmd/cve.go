@@ -9,7 +9,6 @@ import (
 
 	"github.com/giterlizzi/secdb-cli/internal/cve"
 	"github.com/giterlizzi/secdb-cli/internal/output"
-	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
@@ -30,12 +29,12 @@ var cveCmd = &cobra.Command{
 	Example: heredoc.Doc(`
 		secdb cve CVE-2021-44228
 	`),
-	Args: util.ExactArgs(1, "Specify a CVE identifier"),
+	Args: exactArgs(1, "Specify a CVE identifier"),
 	RunE: func(cmd *cobra.Command, args []string) error {
 
 		cveID := strings.ToUpper(args[0])
 
-		if !util.IsValidCVE(cveID) {
+		if !cve.IsValidID(cveID) {
 			return errors.New("invalid CVE identifier")
 		}
 

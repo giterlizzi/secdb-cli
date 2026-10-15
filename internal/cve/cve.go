@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
-// Package cve provides CVE enrichment.
+// Package cve validates CVE identifiers and enriches the CVE records the API
+// returns.
 package cve
 
 import (

@@ -8,7 +8,6 @@ import (
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
 	"github.com/giterlizzi/secdb-cli/internal/report"
-	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
@@ -116,10 +115,10 @@ func (o *purlOptions) readPURLs(args []string) (purls []string, source string, e
 	case len(args) > 0:
 		purls, source = args, "arguments"
 	case o.file != "":
-		purls, err = util.ReadIdentifiers(nil, o.file)
+		purls, err = readFileLines(o.file)
 		source = "file (" + o.file + ")"
 	default:
-		purls, err = util.ReadIdentifiers(nil, "")
+		purls, err = readStdinLines()
 		source = "stdin"
 	}
 	if err != nil {

@@ -6,10 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
+	"github.com/giterlizzi/secdb-cli/internal/cve"
 	"github.com/giterlizzi/secdb-cli/internal/output"
-	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
@@ -102,20 +101,12 @@ func (o *ssvcOptions) request(args []string) ([]string, error) {
 		return nil, fmt.Errorf("invalid --public-well-being-impact: %q (valid options: minimal, material, irreversible)", o.publicWellBeingImpact)
 	}
 
-	cveIDs, err := util.ReadIdentifiers(args, o.file)
+	ids, err := readIdentifiers(args, o.file)
 	if err != nil {
 		return nil, err
 	}
-	if len(cveIDs) == 0 {
+	if len(ids) == 0 {
 		return nil, errors.New("no CVEs provided: pass them as arguments, with --file, or via stdin")
 	}
-
-	for i, id := range cveIDs {
-		id = strings.ToUpper(id)
-		if !util.IsValidCVE(id) {
-			return nil, fmt.Errorf("invalid CVE identifier: %q (expected format: CVE-YYYY-NNNN)", cveIDs[i])
-		}
-		cveIDs[i] = id
-	}
-	return util.Deduplicate(cveIDs), nil
+	return cve.NormalizeIDs(ids)
 }

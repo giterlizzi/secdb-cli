@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"time"
 
 	"github.com/giterlizzi/secdb-cli/internal/meta"
 	"github.com/giterlizzi/secdb-cli/internal/output"
 	"github.com/giterlizzi/secdb-cli/internal/update"
-	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
@@ -56,7 +56,7 @@ var updateCheckCmd = &cobra.Command{
 			data := map[string]any{
 				"Latest":   releaseInfo.Version,
 				"Current":  meta.Version,
-				"Released": fmt.Sprintf("%s (%s)", releaseInfo.PublishedAt.Format("2006-01-02"), util.TimeAgo(releaseInfo.PublishedAt)),
+				"Released": fmt.Sprintf("%s (%s)", releaseInfo.PublishedAt.Format("2006-01-02"), timeAgo(releaseInfo.PublishedAt)),
 				"URL":      releaseInfo.URL,
 				"Notes":    update.ReleaseNotesAfterVersion(releaseNotes, meta.Version),
 			}
@@ -73,4 +73,21 @@ var updateCheckCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(updateCheckCmd)
+}
+
+// timeAgo formats t as a short relative time, e.g. "3 days ago".
+func timeAgo(t time.Time) string {
+	d := time.Since(t)
+	switch {
+	case d < time.Hour:
+		return fmt.Sprintf("%d minutes ago", int(d.Minutes()))
+	case int(d.Hours()) == 1:
+		return "1 hour ago"
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%d hours ago", int(d.Hours()))
+	case int(d.Hours()/24) == 1:
+		return "1 day ago"
+	default:
+		return fmt.Sprintf("%d days ago", int(d.Hours()/24))
+	}
 }

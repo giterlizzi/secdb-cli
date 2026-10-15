@@ -17,7 +17,6 @@ import (
 	"github.com/giterlizzi/secdb-cli/internal/notify"
 	"github.com/giterlizzi/secdb-cli/internal/output"
 	"github.com/giterlizzi/secdb-cli/internal/report"
-	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/spf13/cobra"
 )
@@ -134,8 +133,8 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 		return err
 	}
 
-	util.Statusf("Detected %s %s %s (%d packages)\n", info.OS, info.Version, info.Arch, len(info.Packages))
-	util.Statusf("Auditing %d packages against ZEN SecDB...\n", len(info.Packages))
+	statusf("Detected %s %s %s (%d packages)\n", info.OS, info.Version, info.Arch, len(info.Packages))
+	statusf("Auditing %d packages against ZEN SecDB...\n", len(info.Packages))
 
 	client := global.newClient()
 	items, err := client.LinuxAudit(info.OS, info.Version, info.Arch, info.Packages)
