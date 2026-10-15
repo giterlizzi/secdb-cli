@@ -112,10 +112,11 @@ func (g *globalOptions) validate(cmd *cobra.Command) error {
 
 // newClient returns the SecDB API client for the global options.
 func (g *globalOptions) newClient() *client.Client {
-	return client.NewClient().
-		WithAPIKey(g.apiKey).
-		WithBaseURL(g.baseURL).
-		WithWebURL(g.webURL)
+	return client.New(client.Config{
+		BaseURL: g.baseURL,
+		WebURL:  g.webURL,
+		APIKey:  g.apiKey,
+	})
 }
 
 // outputOptions returns the template options of the json/yaml/template/html

@@ -35,22 +35,49 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// Response holds a decoded API response.
-type Response struct {
-	Body   []byte
-	Header http.Header
+// response is a successful API response: its body and headers.
+type response struct {
+	body   []byte
+	header http.Header
 }
 
 // maxErrorBody caps how much of an unexpected response body is quoted in the
 // returned error, so e.g. a proxy's HTML error page doesn't flood the terminal.
 const maxErrorBody = 512
 
-// NewClient returns a Client with the default base URL and timeout.
-func NewClient() *Client {
-	return &Client{
-		baseURL:    defaultBaseURL,
+// Config configures a Client. The zero value talks to the public ZEN SecDB
+// without an API key.
+type Config struct {
+	// BaseURL is where the API requests go (default: the public ZEN SecDB).
+	// It may carry a path, e.g. a proxy prefix. New doesn't validate it: cmd
+	// checks --base-url with ValidateBaseURL first.
+	BaseURL string
+
+	// WebURL is the base of the web-GUI links (default: BaseURL). Set it only
+	// when the API is reached through a proxy, so the GUI isn't on that host.
+	WebURL string
+
+	// APIKey is sent with every request when set. Public data is the same
+	// without it; a key raises the rate limit.
+	APIKey string
+}
+
+// New returns a Client for cfg, with the defaults applied and any trailing
+// slash dropped from the URLs.
+func New(cfg Config) *Client {
+	c := &Client{
+		baseURL:    strings.TrimRight(cfg.BaseURL, "/"),
+		webURL:     strings.TrimRight(cfg.WebURL, "/"),
+		apiKey:     cfg.APIKey,
 		httpClient: &http.Client{Timeout: 120 * time.Second, CheckRedirect: checkRedirect},
 	}
+	if c.baseURL == "" {
+		c.baseURL = defaultBaseURL
+	}
+	if c.webURL == "" {
+		c.webURL = c.baseURL
+	}
+	return c
 }
 
 // apiKeyHeader carries the API key on every request.
@@ -71,36 +98,6 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 		req.Header.Del(apiKeyHeader)
 	}
 	return nil
-}
-
-// WithAPIKey sets the API key sent with each request (no-op when empty) and
-// returns the client for chaining.
-func (c *Client) WithAPIKey(apiKey string) *Client {
-	if apiKey != "" {
-		c.apiKey = apiKey
-	}
-	return c
-}
-
-// WithBaseURL overrides the API base URL (no-op when empty) and returns the
-// client for chaining. It doesn't validate the value: cmd checks --base-url with
-// ValidateBaseURL first.
-func (c *Client) WithBaseURL(baseURL string) *Client {
-	if baseURL != "" {
-		c.baseURL = strings.TrimRight(baseURL, "/")
-	}
-	return c
-}
-
-// WithWebURL sets the base of the web-GUI permalinks (no-op when empty) and
-// returns the client for chaining. Like WithBaseURL, it doesn't validate the
-// value. Needed only when the API is reached through a proxy, so the GUI isn't on
-// the API host.
-func (c *Client) WithWebURL(webURL string) *Client {
-	if webURL != "" {
-		c.webURL = strings.TrimRight(webURL, "/")
-	}
-	return c
 }
 
 // ValidateBaseURL checks a --base-url value and returns it normalized (lowercase
@@ -164,16 +161,13 @@ func (c *Client) BaseURL() string {
 }
 
 // WebURL returns the base of the web-GUI permalinks (no trailing slash), e.g.
-// weblink.CVE(WebURL(), id): the --web-url when set, else the API base URL,
+// weblink.CVE(WebURL(), id): Config.WebURL when set, else the API base URL,
 // since the ZEN SecDB GUI shares the API host unless a proxy sits in between.
 func (c *Client) WebURL() string {
-	if c.webURL != "" {
-		return c.webURL
-	}
-	return c.baseURL
+	return c.webURL
 }
 
-func (c *Client) request(req *http.Request) (Response, error) {
+func (c *Client) request(req *http.Request) (response, error) {
 
 	req.Header = http.Header{
 		"Content-Type": {"application/json"},
@@ -188,7 +182,7 @@ func (c *Client) request(req *http.Request) (Response, error) {
 
 	res, err := c.httpClient.Do(req)
 	if err != nil {
-		return Response{}, fmt.Errorf("request failed: %w", err)
+		return response{}, fmt.Errorf("request failed: %w", err)
 	}
 	defer func() { _ = res.Body.Close() }()
 
@@ -197,46 +191,43 @@ func (c *Client) request(req *http.Request) (Response, error) {
 
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return Response{}, fmt.Errorf("read body: %w", err)
+		return response{}, fmt.Errorf("read body: %w", err)
 	}
 
 	switch res.StatusCode {
 	case http.StatusOK:
 	case http.StatusNotFound:
-		return Response{}, errors.New("not found")
+		return response{}, errors.New("not found")
 	case http.StatusUnauthorized:
-		return Response{}, errors.New("unauthorized (check SECDB_API_KEY)")
+		return response{}, errors.New("unauthorized (check SECDB_API_KEY)")
 	case http.StatusTooManyRequests:
 		if reset := res.Header.Get("RateLimit-Reset"); reset != "" {
-			return Response{}, fmt.Errorf("rate limit exceeded (retry in %ss)", reset)
+			return response{}, fmt.Errorf("rate limit exceeded (retry in %ss)", reset)
 		}
-		return Response{}, errors.New("rate limit exceeded")
+		return response{}, errors.New("rate limit exceeded")
 	default:
 		if len(body) > maxErrorBody {
 			body = append(body[:maxErrorBody], "..."...)
 		}
-		return Response{}, fmt.Errorf("API error (status %d): %s", res.StatusCode, body)
+		return response{}, fmt.Errorf("API error (status %d): %s", res.StatusCode, body)
 	}
 
-	return Response{
-		Body:   body,
-		Header: res.Header,
-	}, nil
+	return response{body: body, header: res.Header}, nil
 }
 
-func (c *Client) get(path string) (Response, error) {
+func (c *Client) get(path string) (response, error) {
 	req, err := http.NewRequest(http.MethodGet, c.baseURL+path, nil)
 	if err != nil {
-		return Response{}, fmt.Errorf("build request: %w", err)
+		return response{}, fmt.Errorf("build request: %w", err)
 	}
 
 	return c.request(req)
 }
 
-func (c *Client) post(path string, body io.Reader) (Response, error) {
+func (c *Client) post(path string, body io.Reader) (response, error) {
 	req, err := http.NewRequest(http.MethodPost, c.baseURL+path, body)
 	if err != nil {
-		return Response{}, fmt.Errorf("build request: %w", err)
+		return response{}, fmt.Errorf("build request: %w", err)
 	}
 
 	return c.request(req)
@@ -266,9 +257,9 @@ func postJSON[T any](c *Client, path string, in any) (T, error) {
 	return decodeJSON[T](res)
 }
 
-func decodeJSON[T any](res Response) (T, error) {
+func decodeJSON[T any](res response) (T, error) {
 	var out T
-	if err := json.Unmarshal(res.Body, &out); err != nil {
+	if err := json.Unmarshal(res.body, &out); err != nil {
 		return out, fmt.Errorf("parse JSON: %w", err)
 	}
 	return out, nil

@@ -76,7 +76,7 @@ func (c *Client) Search(q string, params url.Values) (*SearchResult, error) {
 	}
 
 	atoi := func(name string) int {
-		n, _ := strconv.Atoi(res.Header.Get(name))
+		n, _ := strconv.Atoi(res.header.Get(name))
 		return n
 	}
 	result.Pagination = SearchPagination{
