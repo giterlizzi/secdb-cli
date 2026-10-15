@@ -17,12 +17,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	maxDepth     int
-	manifestFile string
-	manifestDir  string
-	manifestOpts auditOptions
-)
+// manifestOptions are the flags of "audit manifest".
+type manifestOptions struct {
+	file     string
+	dir      string
+	maxDepth int
+	audit    auditOptions
+}
+
+var manifestOpts manifestOptions
 
 var manifestAuditCmd = &cobra.Command{
 	Use: "manifest (--file <FILE> | --directory <DIR>)",
@@ -77,59 +80,20 @@ var manifestAuditCmd = &cobra.Command{
 	`),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var (
-			files []string
-			err   error
-		)
-
-		// Exactly one of --file/--directory is set (enforced by the flag groups
-		// registered in init).
-		if manifestDir != "" {
-			files, err = manifest.Discover(manifestDir, nil, maxDepth)
-			if err != nil {
-				return err
-			}
-			if len(files) == 0 {
-				return fmt.Errorf("no supported manifests found under %s", manifestDir)
-			}
-		} else {
-			files = []string{manifestFile}
+		files, err := manifestOpts.files()
+		if err != nil {
+			return err
 		}
 
-		var purls []string
-		sources := map[string]output.SourceLocation{}
-
-		for _, f := range files {
-			deps, err := manifest.ParseFile(f)
-			if err != nil {
-				slog.Warn("skipping manifest", "file", f, "error", err)
-				continue
-			}
-			for _, d := range deps {
-				if d.PURL != "" {
-					slog.Debug("found dependency", "file", f, "dependency", d)
-					purls = append(purls, d.PURL)
-					if _, ok := sources[d.PURL]; !ok {
-						sources[d.PURL] = output.SourceLocation{File: f, Line: d.Range.Start.Line}
-					}
-				}
-			}
-		}
-
-		source := manifestFile
-		if manifestDir != "" {
-			source = manifestDir
-		}
-
-		purls = util.Deduplicate(audit.ValidatePURLs(purls))
+		purls, sources := manifestPURLs(files)
 		if len(purls) == 0 {
-			return fmt.Errorf("no auditable dependencies found in %s", source)
+			return fmt.Errorf("no auditable dependencies found in %s", manifestOpts.source())
 		}
 
-		return runPURLAudit(purls, &manifestOpts, auditRenderConfig{
+		return runPURLAudit(purls, &manifestOpts.audit, auditRenderConfig{
 			sources: sources,
 			meta: []report.MetaItem{
-				{Label: "Source", Value: fmt.Sprintf("manifest (%s)", source)},
+				{Label: "Source", Value: fmt.Sprintf("manifest (%s)", manifestOpts.source())},
 				{Label: "Dependencies scanned", Value: strconv.Itoa(len(purls))},
 			},
 		})
@@ -138,15 +102,71 @@ var manifestAuditCmd = &cobra.Command{
 
 func init() {
 	auditCmd.AddCommand(manifestAuditCmd)
-
-	manifestAuditCmd.Flags().StringVarP(&manifestFile, "file", "f", "",
-		"Path to the dependency manifest to audit (go.mod, package-lock.json, requirements.txt, Gemfile.lock, ...)")
-	manifestAuditCmd.Flags().StringVarP(&manifestDir, "directory", "d", "",
-		"Directory to recursively discover and audit manifests in (mutually exclusive with --file)")
-	manifestAuditCmd.Flags().IntVar(&maxDepth, "max-depth", 0,
-		"Max directory depth to descend with --directory (0 = unlimited)")
-	manifestAuditCmd.MarkFlagsMutuallyExclusive("file", "directory")
-	manifestAuditCmd.MarkFlagsOneRequired("file", "directory")
-
 	manifestOpts.addFlags(manifestAuditCmd)
+}
+
+func (o *manifestOptions) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&o.file, "file", "f", "",
+		"Path to the dependency manifest to audit (go.mod, package-lock.json, requirements.txt, Gemfile.lock, ...)")
+	cmd.Flags().StringVarP(&o.dir, "directory", "d", "",
+		"Directory to recursively discover and audit manifests in (mutually exclusive with --file)")
+	cmd.Flags().IntVar(&o.maxDepth, "max-depth", 0,
+		"Max directory depth to descend with --directory (0 = unlimited)")
+	cmd.MarkFlagsMutuallyExclusive("file", "directory")
+	cmd.MarkFlagsOneRequired("file", "directory")
+
+	o.audit.addFlags(cmd)
+}
+
+// source is what the audit reads: the --directory or the --file (exactly one is
+// set, enforced by the flag groups in addFlags).
+func (o *manifestOptions) source() string {
+	if o.dir != "" {
+		return o.dir
+	}
+	return o.file
+}
+
+// files returns the manifests to audit: the --file, or the supported manifests
+// discovered under --directory.
+func (o *manifestOptions) files() ([]string, error) {
+	if o.dir == "" {
+		return []string{o.file}, nil
+	}
+	files, err := manifest.Discover(o.dir, nil, o.maxDepth)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) == 0 {
+		return nil, fmt.Errorf("no supported manifests found under %s", o.dir)
+	}
+	return files, nil
+}
+
+// manifestPURLs parses the manifests and returns the PURLs of their
+// dependencies, valid and de-duplicated, with where each one is first declared
+// (for the SARIF report). A manifest that fails to parse is skipped with a
+// warning.
+func manifestPURLs(files []string) ([]string, map[string]output.SourceLocation) {
+	var purls []string
+	sources := map[string]output.SourceLocation{}
+
+	for _, f := range files {
+		deps, err := manifest.ParseFile(f)
+		if err != nil {
+			slog.Warn("skipping manifest", "file", f, "error", err)
+			continue
+		}
+		for _, d := range deps {
+			if d.PURL == "" {
+				continue
+			}
+			slog.Debug("found dependency", "file", f, "dependency", d)
+			purls = append(purls, d.PURL)
+			if _, ok := sources[d.PURL]; !ok {
+				sources[d.PURL] = output.SourceLocation{File: f, Line: d.Range.Start.Line}
+			}
+		}
+	}
+	return util.Deduplicate(audit.ValidatePURLs(purls)), sources
 }

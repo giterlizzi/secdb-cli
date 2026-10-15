@@ -21,12 +21,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	searchType    string
-	searchSince   string
-	searchPage    int
-	searchPerPage int
-)
+// searchOptions are the flags of "search".
+type searchOptions struct {
+	types   string
+	since   string
+	page    int
+	perPage int
+}
+
+var searchOpts searchOptions
 
 var searchCmd = &cobra.Command{
 	Use:     "search <query>...",
@@ -78,23 +81,82 @@ var searchCmd = &cobra.Command{
 	`),
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		term, params, err := searchRequest(cmd, args)
+		term, params, err := searchOpts.request(cmd, args)
 		if err != nil {
 			return err
 		}
 
-		secdb := newSecDbClient()
+		secdb := global.newClient()
 		result, err := secdb.Search(term, params)
 		if err != nil {
 			return fmt.Errorf("search: %w", err)
 		}
 
-		if outputFormat == "text" {
+		if global.output == "text" {
 			return output.RenderText(os.Stdout, newSearchReport(result, secdb.WebURL()), "search")
 		}
 
-		return output.Render(os.Stdout, result, output.Format(outputFormat), newOutputOptions())
+		return output.Render(os.Stdout, result, output.Format(global.output), global.outputOptions())
 	},
+}
+
+func init() {
+	rootCmd.AddCommand(searchCmd)
+	searchOpts.addFlags(searchCmd)
+}
+
+func (o *searchOptions) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.types, "type", "",
+		"Only these record types, comma-separated: "+strings.Join(client.SearchTypes, ", "))
+	cmd.Flags().StringVar(&o.since, "since", "",
+		"Only the records modified within this window (e.g. 30d, 2w, 6m, 1y)")
+	cmd.Flags().IntVar(&o.page, "page", 0,
+		"Page number (default 1)")
+	cmd.Flags().IntVar(&o.perPage, "per-page", 0,
+		"Results per page (default 100)")
+}
+
+// request validates the query and the flags and returns them as the query and
+// parameters of the search request, before any API call.
+func (o *searchOptions) request(cmd *cobra.Command, args []string) (string, url.Values, error) {
+	term := strings.TrimSpace(strings.Join(args, " "))
+	if len(term) < 3 {
+		return "", nil, errors.New("search query must be at least 3 characters long")
+	}
+
+	params := url.Values{}
+
+	types, err := searchTypes(o.types)
+	if err != nil {
+		return "", nil, err
+	}
+	if types != "" {
+		params.Set("type", types)
+	}
+
+	since, err := searchDuration(o.since)
+	if err != nil {
+		return "", nil, err
+	}
+	if since != "" {
+		params.Set("since", since)
+	}
+
+	if cmd.Flags().Changed("page") {
+		if o.page < 1 {
+			return "", nil, errors.New("invalid --page (must be 1 or more)")
+		}
+		params.Set("page", strconv.Itoa(o.page))
+	}
+
+	if cmd.Flags().Changed("per-page") {
+		if o.perPage < 1 {
+			return "", nil, errors.New("invalid --per-page (must be 1 or more)")
+		}
+		params.Set("per_page", strconv.Itoa(o.perPage))
+	}
+
+	return term, params, nil
 }
 
 // searchReport is the data of the search text template: the result page, the
@@ -110,49 +172,6 @@ type searchReport struct {
 type facetCount struct {
 	Name  string
 	Count int
-}
-
-// searchRequest validates the query and the flags and returns them as the
-// query and parameters of the search request, before any API call.
-func searchRequest(cmd *cobra.Command, args []string) (string, url.Values, error) {
-	term := strings.TrimSpace(strings.Join(args, " "))
-	if len(term) < 3 {
-		return "", nil, errors.New("search query must be at least 3 characters long")
-	}
-
-	params := url.Values{}
-
-	types, err := searchTypes(searchType)
-	if err != nil {
-		return "", nil, err
-	}
-	if types != "" {
-		params.Set("type", types)
-	}
-
-	since, err := searchDuration(searchSince)
-	if err != nil {
-		return "", nil, err
-	}
-	if since != "" {
-		params.Set("since", since)
-	}
-
-	if cmd.Flags().Changed("page") {
-		if searchPage < 1 {
-			return "", nil, errors.New("invalid --page (must be 1 or more)")
-		}
-		params.Set("page", strconv.Itoa(searchPage))
-	}
-
-	if cmd.Flags().Changed("per-page") {
-		if searchPerPage < 1 {
-			return "", nil, errors.New("invalid --per-page (must be 1 or more)")
-		}
-		params.Set("per_page", strconv.Itoa(searchPerPage))
-	}
-
-	return term, params, nil
 }
 
 func newSearchReport(result *client.SearchResult, baseURL string) searchReport {
@@ -233,17 +252,4 @@ func searchDuration(value string) (string, error) {
 		return "", fmt.Errorf("invalid --since: %q (want a window of at least 1, e.g. 30d)", value)
 	}
 	return iso, nil
-}
-
-func init() {
-	rootCmd.AddCommand(searchCmd)
-
-	searchCmd.Flags().StringVar(&searchType, "type", "",
-		"Only these record types, comma-separated: "+strings.Join(client.SearchTypes, ", "))
-	searchCmd.Flags().StringVar(&searchSince, "since", "",
-		"Only the records modified within this window (e.g. 30d, 2w, 6m, 1y)")
-	searchCmd.Flags().IntVar(&searchPage, "page", 0,
-		"Page number (default 1)")
-	searchCmd.Flags().IntVar(&searchPerPage, "per-page", 0,
-		"Results per page (default 100)")
 }

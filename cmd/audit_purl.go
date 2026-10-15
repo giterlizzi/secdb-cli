@@ -14,11 +14,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	purlFile string
-	sbomFile string
-	purlOpts auditOptions
-)
+// purlOptions are the flags of "audit purl".
+type purlOptions struct {
+	file  string
+	sbom  string
+	audit auditOptions
+}
+
+var purlOpts purlOptions
 
 var purlAuditCmd = &cobra.Command{
 	Use: "purl <PURL...>",
@@ -70,37 +73,13 @@ var purlAuditCmd = &cobra.Command{
 	`),
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-
-		var purls []string
-		var source string
-		var err error
-
-		switch {
-		case sbomFile != "":
-			purls, err = audit.ReadPURLsFromSBOM(sbomFile)
-			source = "SBOM (" + sbomFile + ")"
-		default:
-			purls, err = util.ReadIdentifiers(args, purlFile)
-			switch {
-			case len(args) > 0:
-				source = "arguments"
-			case purlFile != "":
-				source = "file (" + purlFile + ")"
-			default:
-				source = "stdin"
-			}
-		}
+		purls, source, err := purlOpts.readPURLs(args)
 		if err != nil {
 			return err
 		}
 
-		purls = util.Deduplicate(audit.ValidatePURLs(purls))
-		if len(purls) == 0 {
-			return errors.New("no PURLs provided: pass them as arguments, with --file, or via stdin")
-		}
-
-		return runPURLAudit(purls, &purlOpts, auditRenderConfig{
-			source: sbomFile,
+		return runPURLAudit(purls, &purlOpts.audit, auditRenderConfig{
+			source: purlOpts.sbom,
 			meta: []report.MetaItem{
 				{Label: "Source", Value: source},
 				{Label: "PURLs scanned", Value: strconv.Itoa(len(purls))},
@@ -111,13 +90,44 @@ var purlAuditCmd = &cobra.Command{
 
 func init() {
 	auditCmd.AddCommand(purlAuditCmd)
+	purlOpts.addFlags(purlAuditCmd)
+}
 
-	purlAuditCmd.Flags().StringVarP(&purlFile, "file", "f", "",
+func (o *purlOptions) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&o.file, "file", "f", "",
 		"Read PURL from file (one PURL per line) instead of arguments/stdin")
-	purlAuditCmd.Flags().StringVarP(&sbomFile, "sbom", "", "",
+	cmd.Flags().StringVarP(&o.sbom, "sbom", "", "",
 		"Read PURLs from CycloneDX SBOM file (JSON) instead of arguments/stdin/file")
 	// Superseded by "audit sbom --file"; still accepted, hidden from the help.
-	_ = purlAuditCmd.Flags().MarkDeprecated("sbom", "use 'secdb audit sbom --file' instead")
+	_ = cmd.Flags().MarkDeprecated("sbom", "use 'secdb audit sbom --file' instead")
 
-	purlOpts.addFlags(purlAuditCmd)
+	o.audit.addFlags(cmd)
+}
+
+// readPURLs returns the PURLs to audit, valid and de-duplicated, from the one
+// input in use (--sbom, the arguments, --file or stdin, in this order of
+// precedence), and that input's description for the report header.
+func (o *purlOptions) readPURLs(args []string) (purls []string, source string, err error) {
+	switch {
+	case o.sbom != "":
+		purls, err = audit.ReadPURLsFromSBOM(o.sbom)
+		source = "SBOM (" + o.sbom + ")"
+	case len(args) > 0:
+		purls, source = args, "arguments"
+	case o.file != "":
+		purls, err = util.ReadIdentifiers(nil, o.file)
+		source = "file (" + o.file + ")"
+	default:
+		purls, err = util.ReadIdentifiers(nil, "")
+		source = "stdin"
+	}
+	if err != nil {
+		return nil, "", err
+	}
+
+	purls = util.Deduplicate(audit.ValidatePURLs(purls))
+	if len(purls) == 0 {
+		return nil, "", errors.New("no PURLs provided: pass them as arguments, with --file, or via stdin")
+	}
+	return purls, source, nil
 }

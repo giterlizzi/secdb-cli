@@ -128,7 +128,7 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 	util.Statusf("Detected %s %s %s (%d packages)\n", info.OS, info.Version, info.Arch, len(info.Packages))
 	util.Statusf("Auditing %d packages against ZEN SecDB...\n", len(info.Packages))
 
-	client := newSecDbClient()
+	client := global.newClient()
 	data, err := client.LinuxAudit(info.OS, info.Version, info.Arch, info.Packages)
 	if err != nil {
 		return err
@@ -154,7 +154,7 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 // manifest commands: cfg carries only what differs between them (meta rows,
 // SARIF source/sources), runPURLAudit fills in the rest.
 func runPURLAudit(purls []string, opts *auditOptions, cfg auditRenderConfig) error {
-	client := newSecDbClient()
+	client := global.newClient()
 	data, err := client.PURLAudit(purls)
 	if err != nil {
 		return err
@@ -188,7 +188,7 @@ func renderAudit(cfg auditRenderConfig) error {
 
 // writeAuditOutput writes the audit results to stdout in the --output format.
 func writeAuditOutput(cfg auditRenderConfig) error {
-	switch outputFormat {
+	switch global.output {
 	case "text":
 		return writeAuditText(cfg)
 	case "sarif":
@@ -198,7 +198,7 @@ func writeAuditOutput(cfg auditRenderConfig) error {
 		r := audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
 		return output.WriteCSV(os.Stdout, r, "audit-details-csv")
 	default:
-		if err := output.Render(os.Stdout, cfg.data, output.Format(outputFormat), newOutputOptions()); err != nil {
+		if err := output.Render(os.Stdout, cfg.data, output.Format(global.output), global.outputOptions()); err != nil {
 			return fmt.Errorf("failed to render output: %w", err)
 		}
 		return nil

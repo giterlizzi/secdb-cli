@@ -15,11 +15,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	cvesFile              string
+// ssvcOptions are the flags of "ssvc calculate".
+type ssvcOptions struct {
+	file                  string
 	missionPrevalence     string
 	publicWellBeingImpact string
-)
+}
+
+var ssvcOpts ssvcOptions
 
 var (
 	validMissionPrevalence = map[string]bool{"minimal": true, "support": true, "essential": true}
@@ -51,55 +54,68 @@ var ssvcCalculateCmd = &cobra.Command{
 			secdb ssvc calculate CVE-2021-44228 CVE-2023-4863 --mission-prevalence support --public-well-being-impact minimal
 	`),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if !validMissionPrevalence[missionPrevalence] {
-			return fmt.Errorf("invalid --mission-prevalence: %q (valid options: minimal, support, essential)", missionPrevalence)
-		}
-		if !validPublicWellBeing[publicWellBeingImpact] {
-			return fmt.Errorf("invalid --public-well-being-impact: %q (valid options: minimal, material, irreversible)", publicWellBeingImpact)
-		}
-
-		cveIDs, err := util.ReadIdentifiers(args, cvesFile)
-		if err != nil {
-			return err
-		}
-		if len(cveIDs) == 0 {
-			return errors.New("no CVEs provided: pass them as arguments, with --file, or via stdin")
-		}
-
-		for i, id := range cveIDs {
-			id = strings.ToUpper(id)
-			if !util.IsValidCVE(id) {
-				return fmt.Errorf("invalid CVE identifier: %q (expected format: CVE-YYYY-NNNN)", cveIDs[i])
-			}
-			cveIDs[i] = id
-		}
-		cveIDs = util.Deduplicate(cveIDs)
-
-		client := newSecDbClient()
-		data, err := client.SSVCBulk(cveIDs, missionPrevalence, publicWellBeingImpact)
+		cveIDs, err := ssvcOpts.request(args)
 		if err != nil {
 			return err
 		}
 
-		if outputFormat == "text" {
+		client := global.newClient()
+		data, err := client.SSVCBulk(cveIDs, ssvcOpts.missionPrevalence, ssvcOpts.publicWellBeingImpact)
+		if err != nil {
+			return err
+		}
+
+		if global.output == "text" {
 			return output.RenderText(os.Stdout, data, "ssvc-calculate")
 		}
-		return output.Render(os.Stdout, data, output.Format(outputFormat), newOutputOptions())
+		return output.Render(os.Stdout, data, output.Format(global.output), global.outputOptions())
 	},
 }
 
 func init() {
 	ssvcCmd.AddCommand(ssvcCalculateCmd)
+	ssvcOpts.addFlags(ssvcCalculateCmd)
+}
 
-	ssvcCalculateCmd.Flags().StringVarP(&cvesFile, "file", "f", "",
+func (o *ssvcOptions) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&o.file, "file", "f", "",
 		"Read CVEs from a file instead of arguments/stdin")
-	ssvcCalculateCmd.Flags().StringVar(&missionPrevalence, "mission-prevalence", "",
+	cmd.Flags().StringVar(&o.missionPrevalence, "mission-prevalence", "",
 		"Mission prevalence: minimal, support, or essential (required)")
-	ssvcCalculateCmd.Flags().StringVar(&publicWellBeingImpact, "public-well-being-impact", "",
+	cmd.Flags().StringVar(&o.publicWellBeingImpact, "public-well-being-impact", "",
 		"Public well-being impact: minimal, material, or irreversible (required)")
 
 	// Errors here only occur if the flag name is wrong (a programming bug), and
 	// this runs in init(), so ignore them explicitly.
-	_ = ssvcCalculateCmd.MarkFlagRequired("mission-prevalence")
-	_ = ssvcCalculateCmd.MarkFlagRequired("public-well-being-impact")
+	_ = cmd.MarkFlagRequired("mission-prevalence")
+	_ = cmd.MarkFlagRequired("public-well-being-impact")
+}
+
+// request validates the flags, then reads the CVEs to calculate (arguments,
+// --file or stdin, in this order of precedence) and returns them uppercased,
+// valid and de-duplicated, before any API call.
+func (o *ssvcOptions) request(args []string) ([]string, error) {
+	if !validMissionPrevalence[o.missionPrevalence] {
+		return nil, fmt.Errorf("invalid --mission-prevalence: %q (valid options: minimal, support, essential)", o.missionPrevalence)
+	}
+	if !validPublicWellBeing[o.publicWellBeingImpact] {
+		return nil, fmt.Errorf("invalid --public-well-being-impact: %q (valid options: minimal, material, irreversible)", o.publicWellBeingImpact)
+	}
+
+	cveIDs, err := util.ReadIdentifiers(args, o.file)
+	if err != nil {
+		return nil, err
+	}
+	if len(cveIDs) == 0 {
+		return nil, errors.New("no CVEs provided: pass them as arguments, with --file, or via stdin")
+	}
+
+	for i, id := range cveIDs {
+		id = strings.ToUpper(id)
+		if !util.IsValidCVE(id) {
+			return nil, fmt.Errorf("invalid CVE identifier: %q (expected format: CVE-YYYY-NNNN)", cveIDs[i])
+		}
+		cveIDs[i] = id
+	}
+	return util.Deduplicate(cveIDs), nil
 }

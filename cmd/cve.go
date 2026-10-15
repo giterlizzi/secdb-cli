@@ -39,20 +39,20 @@ var cveCmd = &cobra.Command{
 			return errors.New("invalid CVE identifier")
 		}
 
-		client := newSecDbClient()
+		client := global.newClient()
 		data, err := client.GetCVE(cveID, "affected_products", "advisories", "references")
 		if err != nil {
 			return err
 		}
 
-		if outputFormat == "text" {
+		if global.output == "text" {
 			data["secdb_url"] = client.WebURL()
 			cve.SummarizeAffectedProducts(data)
 
 			return output.RenderText(os.Stdout, data, "cve", output.TerminalWrap(100))
 		}
 
-		return output.Render(os.Stdout, data, output.Format(outputFormat), newOutputOptions())
+		return output.Render(os.Stdout, data, output.Format(global.output), global.outputOptions())
 	},
 }
 
