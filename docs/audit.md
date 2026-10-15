@@ -104,7 +104,7 @@ secdb audit linux --host server.example.com --user ops
 secdb audit linux ssh://ops@server.example.com:2222
 ```
 
-The `ssh://user@host:port` argument (the `ssh://` prefix is optional) is a shorthand for `--host`, `--user` and `--port`, and takes precedence over them. The connection uses your `ssh` client, so `~/.ssh/config`, the SSH agent and `known_hosts` apply, and host keys are always checked.
+The `ssh://user@host:port` argument (the `ssh://` prefix is optional) is a shorthand for `--host`, `--user` and `--port`, and takes precedence over them. The connection uses your `ssh` client, so `~/.ssh/config`, the SSH agent and `known_hosts` apply, and host keys are always checked. With `--debug` (or `SECDB_DEBUG`), `ssh` runs with `-vvv` and its connection log goes to the debug output on stderr, which helps when a host can't be reached.
 
 On the target the command runs only read-only commands: `cat /etc/os-release`, `uname -m` and the package list of the distribution (`dpkg-query`, `rpm`, `apk`, or `/var/log/packages` on Slackware). Supported distributions: Debian, Ubuntu, RHEL, Rocky Linux, AlmaLinux, Oracle Linux, Amazon Linux, Fedora, SUSE, Alpine and Slackware.
 

@@ -92,6 +92,8 @@ func (o *linuxOptions) addFlags(cmd *cobra.Command) {
 
 // target returns the system to audit: the local machine, or the SSH host of
 // the flags. An ssh://user@host:port argument overrides --host/--user/--port.
+// With --debug (or SECDB_DEBUG: global.debug, set by setupLogging) ssh runs
+// with -vvv, and its connection log goes to the debug output.
 func (o *linuxOptions) target(args []string) (inventory.Target, error) {
 	t := inventory.Target{
 		Host:         o.host,
@@ -100,6 +102,7 @@ func (o *linuxOptions) target(args []string) (inventory.Target, error) {
 		IdentityFile: o.identityFile,
 		ConfigFile:   o.sshConfig,
 		Sudo:         o.sudo,
+		Verbose:      global.debug,
 	}
 	if len(args) == 0 {
 		return t, nil
