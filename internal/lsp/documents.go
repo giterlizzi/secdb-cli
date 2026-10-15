@@ -17,9 +17,7 @@ func (s *Server) didOpen(ctx *glsp.Context, params *protocol.DidOpenTextDocument
 	uri := params.TextDocument.URI
 	slog.Debug("didOpen", "uri", uri)
 
-	s.mu.Lock()
-	s.open[uri] = true
-	s.mu.Unlock()
+	s.markOpen(uri)
 
 	// Through the timer, not inline: glsp handles one message at a time, so an
 	// API call made here would block the server until it returns.
@@ -46,17 +44,10 @@ func (s *Server) didChange(ctx *glsp.Context, params *protocol.DidChangeTextDocu
 }
 
 func (s *Server) didClose(ctx *glsp.Context, params *protocol.DidCloseTextDocumentParams) error {
-	s.mu.Lock()
-
 	uri := params.TextDocument.URI
+	slog.Debug("didClose", "uri", uri)
 
-	if t, ok := s.timers[uri]; ok {
-		t.Stop()
-		delete(s.timers, uri)
-	}
-	delete(s.open, uri)
-	s.mu.Unlock()
-
+	s.forget(uri)
 	publishDiagnostics(ctx, uri, nil)
 
 	return nil
@@ -78,6 +69,24 @@ func (s *Server) delayAuditManifest(ctx *glsp.Context, uri protocol.DocumentUri,
 			slog.Debug("audit failed", "error", err)
 		}
 	})
+}
+
+// markOpen records that the editor opened the document.
+func (s *Server) markOpen(uri protocol.DocumentUri) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.open[uri] = true
+}
+
+// forget drops a closed document: its pending audit and its open mark.
+func (s *Server) forget(uri protocol.DocumentUri) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if t, ok := s.timers[uri]; ok {
+		t.Stop()
+		delete(s.timers, uri)
+	}
+	delete(s.open, uri)
 }
 
 // isOpen reports whether the editor has the document open.

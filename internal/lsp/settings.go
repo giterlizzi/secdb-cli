@@ -100,10 +100,7 @@ func (s *Server) didChangeConfiguration(ctx *glsp.Context, params *protocol.DidC
 		go s.pullSettings(ctx)
 		return nil
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.settings = s.settings.merge(section(params.Settings))
-	slog.Debug("settings changed", "settings", s.settings)
+	s.mergeSettings(section(params.Settings), "didChangeConfiguration")
 	return nil
 }
 
@@ -124,10 +121,16 @@ func (s *Server) pullSettings(ctx *glsp.Context) {
 		return
 	}
 
+	s.mergeSettings(result[0], "workspace/configuration")
+}
+
+// mergeSettings applies raw (the settings sent by the client, from) over the
+// current ones; see settings.merge.
+func (s *Server) mergeSettings(raw any, from string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.settings = s.settings.merge(result[0])
-	slog.Debug("settings pulled", "settings", s.settings)
+	s.settings = s.settings.merge(raw)
+	slog.Debug("settings", "from", from, "settings", s.settings)
 }
 
 // currentSettings returns a snapshot of the user preferences.

@@ -23,30 +23,36 @@ const serverName = "secdb-lsp"
 // Server is the secdb Language Server: it audits dependency manifests as they
 // are opened/edited and reports vulnerabilities as diagnostics.
 type Server struct {
-	// SecDB client
+	// client calls the ZEN SecDB API (built by cmd from the global flags).
 	client *client.Client
 
-	// server options
+	// opts are the command-line options; settings start from them.
 	opts Options
 
-	// settings are the user preferences (guarded by mu: the client can change
-	// them at runtime with workspace/didChangeConfiguration)
-	settings settings
-
-	// server handlers
+	// handler maps the LSP methods to the Server's methods (see NewServer).
 	handler protocol.Handler
 
-	// mutex used in audit
+	// mu guards settings, timers and open, which the message handlers, the
+	// debounce timers and the workspace discovery use from different
+	// goroutines. Take it in a small named method (currentSettings, isOpen,
+	// markOpen, forget, ...), never across an API call or a ctx.Call.
 	mu sync.Mutex
 
-	// timers for opened documents
+	// settings are the user preferences: the client can change them at
+	// runtime with workspace/didChangeConfiguration.
+	settings settings
+
+	// timers holds the pending (debounced) audit of each edited document.
 	timers map[protocol.DocumentUri]*time.Timer
 
-	// workspaces directories
+	// open is the set of documents the editor has open: the workspace
+	// discovery skips them, since the edit path keeps them fresh.
+	open map[string]bool
+
+	// roots are the workspace folders, read from initialize.
 	roots []string
 
-	// open return the list of opened documents
-	open map[string]bool
+	// The client capabilities, read once in initialize.
 
 	// showDocument is set when the client can open a URL (window/showDocument).
 	showDocument bool
@@ -135,10 +141,8 @@ func (s *Server) initialize(ctx *glsp.Context, params *protocol.InitializeParams
 	}
 	s.sendDependencies = hasExperimental(params.Capabilities.Experimental, dependenciesCapability)
 
-	s.mu.Lock()
-	s.settings = s.settings.merge(params.InitializationOptions)
-	slog.Debug("settings", "settings", s.settings, "pull", s.pullConfig, "dependencies", s.sendDependencies)
-	s.mu.Unlock()
+	slog.Debug("client capabilities", "pull", s.pullConfig, "dependencies", s.sendDependencies, "show_document", s.showDocument)
+	s.mergeSettings(params.InitializationOptions, "initialize")
 
 	return protocol.InitializeResult{
 		Capabilities: caps,
