@@ -44,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   can no longer reach the terminal.
 - The template functions `abbrev` and `trunc` count characters, not bytes, so
   they no longer cut a multi-byte character in two.
+- Notifications count the findings with no severity as `unknown`: the webhook
+  `counts` had an empty `""` key for them, and Slack and Teams left them out,
+  so their counts didn't add up to the number of findings in the title.
 
 ### Security
 

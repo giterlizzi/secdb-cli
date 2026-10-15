@@ -37,7 +37,7 @@ In GitHub Actions, GitLab CI and Gitea Actions the message also carries the proj
 
 ## Payload
 
-The `webhook` provider POSTs this JSON; Slack and Teams get the same data in their own format. At most 20 findings are included: `total` and `counts` cover all of them, `truncated` says how many were left out.
+The `webhook` provider POSTs this JSON; Slack and Teams get the same data in their own format. At most 20 findings are included: `total` and `counts` cover all of them, `truncated` says how many were left out. `counts` has one key per severity (`critical`, `high`, `medium`, `low`, `info`), plus `unknown` for the findings whose advisory has no severity, so the counts always add up to `total`.
 
 ```json
 {

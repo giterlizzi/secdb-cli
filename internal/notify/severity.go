@@ -2,7 +2,10 @@
 
 package notify
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // Severity presentation shared by the notification providers. The colors are a
 // rendering concern (Slack attachment color, HTML mail), so they live here
@@ -23,8 +26,22 @@ var severityColor = map[string]string{
 }
 
 // severityOrder is the display order (most severe first), so a rendered message
-// is stable regardless of Go's map iteration order.
-var severityOrder = []string{"critical", "high", "medium", "low", "info"}
+// is stable regardless of Go's map iteration order. unknownSeverity comes last.
+var severityOrder = []string{"critical", "high", "medium", "low", "info", unknownSeverity}
+
+// unknownSeverity is the count bucket of the findings whose severity is
+// missing or not one of severityOrder (an advisory without one, a feed value
+// such as "none"), so the counts always add up to the message Total.
+const unknownSeverity = "unknown"
+
+// severityBucket returns the Message.Counts key of a finding's severity: the
+// severity itself when it is a known one, else unknownSeverity.
+func severityBucket(severity string) string {
+	if slices.Contains(severityOrder, severity) {
+		return severity
+	}
+	return unknownSeverity
+}
 
 // severityCount is a per-severity count ready to render: a title-cased label
 // ("High") and how many findings had that severity.
