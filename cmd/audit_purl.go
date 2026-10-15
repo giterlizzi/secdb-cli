@@ -50,25 +50,19 @@ var purlAuditCmd = &cobra.Command{
 	`),
 	Short: "Audit PURLs against ZEN SecDB",
 	Long: heredoc.Doc(`
-		Package URLs (PURLs) are a standardized way to identify software packages.
-		This command allows you to audit one or more PURLs against the ZEN SecDB to
-		check for known vulnerabilities and security issues.
+		Audits Package URLs (PURLs, e.g. pkg:npm/lodash@4.17.20) against the ZEN
+		SecDB for known vulnerabilities.
 
-		You can provide PURLs directly as command-line arguments, read them from a
-		file using the --file flag, or pipe them in via standard input. To audit a
-		CycloneDX BOM (JSON), use "secdb audit sbom" (the --sbom flag of this
-		command is deprecated).
+		The PURLs are read from the arguments, else from --file (one per line, "#"
+		starts a comment), else from standard input. Invalid PURLs are skipped and
+		duplicates removed. For a CycloneDX BOM (JSON) use "secdb audit sbom" (the
+		--sbom flag of this command is deprecated).
 
-		If more than one input method is provided, only one is used, in this order
-		of precedence: arguments, --file, standard input.
-
-		Use --output=sarif to produce a SARIF 2.1.0 report suitable for GitHub Code
-		Scanning or other SARIF consumers. A plain PURL list has no source file, so
-		the artifact location in the report is left empty; "secdb audit sbom" and
-		"secdb audit manifest" set it to the audited file. Findings matched
-		by --ignore-file are still included in the report, but as a suppressed
-		result (kind: external, status: accepted) so SARIF consumers like GitHub
-		Code Scanning don't open a new alert for them.
+		--output=sarif writes a SARIF 2.1.0 report, e.g. for GitHub Code Scanning.
+		A PURL list has no source file, so its locations are empty ("audit sbom"
+		and "audit manifest" point at the audited file). A finding accepted by
+		--ignore-file stays in the report as a suppressed result (kind: external,
+		status: accepted), so Code Scanning doesn't open an alert for it.
 	`),
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {

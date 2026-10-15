@@ -37,10 +37,10 @@ var ssvcCalculateCmd = &cobra.Command{
 		(from ZEN SecDB) with the mission prevalence and public well-being impact
 		you provide.
 
-		You can provide CVE identifiers as command-line arguments, read them from
-		a file using the --file flag, or pipe them in via standard input. If more
-		than one input method is provided, only one is used, in this order of
-		precedence: arguments, --file, standard input.
+		The CVEs are read from the arguments, else from --file (one per line, "#"
+		starts a comment), else from standard input. Duplicates are removed, and a
+		CVE that isn't found is listed with its status instead of failing the
+		whole run.
 	`),
 	Example: heredoc.Doc(`
 		Single CVE:

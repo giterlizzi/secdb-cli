@@ -19,12 +19,10 @@ var cveCmd = &cobra.Command{
 	GroupID: groupIntel,
 	Short:   "Fetch CVE info from ZEN SecDB",
 	Long: heredoc.Doc(`
-		This command allows you to fetch information about a specific CVE (Common
-		Vulnerabilities and Exposures) identifier from the ZEN SecDB.
-
-		You can provide a CVE identifier as a command-line argument, and the command
-		will retrieve relevant information about that CVE, including affected products
-		and advisories.
+		Prints the ZEN SecDB record of a CVE: CVSS v2/v3/v4, SSVC, EPSS, CISA KEV
+		status, weaknesses, exploit maturity, the affected vendors and products,
+		the advisories and the references, with links to the ZEN SecDB web GUI.
+		--output json or yaml prints the whole record.
 	`),
 	Example: heredoc.Doc(`
 		secdb cve CVE-2021-44228
