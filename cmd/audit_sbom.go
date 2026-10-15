@@ -8,7 +8,6 @@ import (
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
 	"github.com/giterlizzi/secdb-cli/internal/report"
-	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
@@ -55,7 +54,7 @@ var sbomAuditCmd = &cobra.Command{
 			return err
 		}
 
-		purls = util.Deduplicate(audit.ValidatePURLs(purls))
+		purls = audit.NormalizePURLs(purls)
 		if len(purls) == 0 {
 			return fmt.Errorf("no PURLs found in %s", sbomOpts.file)
 		}

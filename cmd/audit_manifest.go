@@ -11,7 +11,6 @@ import (
 	"github.com/giterlizzi/secdb-cli/internal/manifest"
 	"github.com/giterlizzi/secdb-cli/internal/output"
 	"github.com/giterlizzi/secdb-cli/internal/report"
-	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
@@ -146,9 +145,9 @@ func (o *manifestOptions) files() ([]string, error) {
 }
 
 // manifestPURLs parses the manifests and returns the PURLs of their
-// dependencies, valid and de-duplicated, with where each one is first declared
-// (for the SARIF report). A manifest that fails to parse is skipped with a
-// warning.
+// dependencies, normalized and de-duplicated, with where each one is first
+// declared (for the SARIF report). A manifest that fails to parse is skipped
+// with a warning.
 func manifestPURLs(files []string) ([]string, map[string]output.SourceLocation) {
 	var purls []string
 	sources := map[string]output.SourceLocation{}
@@ -159,16 +158,12 @@ func manifestPURLs(files []string) ([]string, map[string]output.SourceLocation) 
 			slog.Warn("skipping manifest", "file", f, "error", err)
 			continue
 		}
+		purls = append(purls, manifest.PURLs(deps)...)
 		for _, d := range deps {
-			if d.PURL == "" {
-				continue
-			}
-			slog.Debug("found dependency", "file", f, "dependency", d)
-			purls = append(purls, d.PURL)
-			if _, ok := sources[d.PURL]; !ok {
+			if _, ok := sources[d.PURL]; d.PURL != "" && !ok {
 				sources[d.PURL] = output.SourceLocation{File: f, Line: d.Range.Start.Line}
 			}
 		}
 	}
-	return util.Deduplicate(audit.ValidatePURLs(purls)), sources
+	return audit.NormalizePURLs(purls), sources
 }

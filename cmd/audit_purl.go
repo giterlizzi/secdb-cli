@@ -126,7 +126,7 @@ func (o *purlOptions) readPURLs(args []string) (purls []string, source string, e
 		return nil, "", err
 	}
 
-	purls = util.Deduplicate(audit.ValidatePURLs(purls))
+	purls = audit.NormalizePURLs(purls)
 	if len(purls) == 0 {
 		return nil, "", errors.New("no PURLs provided: pass them as arguments, with --file, or via stdin")
 	}
