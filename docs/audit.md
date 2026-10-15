@@ -28,7 +28,7 @@ command | secdb audit purl
 
 [Package URLs](https://github.com/package-url/purl-spec) are read from the arguments, else from `--file`/`-f`, else from stdin. Invalid PURLs are skipped and duplicates are removed. For a CycloneDX SBOM use [`audit sbom`](#audit-a-cyclonedx-sbom).
 
-In `text` output the report starts with a short header: where the PURLs came from (arguments, file or stdin) and how many were scanned. The header is not part of the `json`, `yaml` or `sarif` output.
+In `text` output the report starts with a short header: where the PURLs came from (arguments, file or stdin) and how many were scanned. The header is not part of the `json`, `yaml`, `sarif` or `csv` output.
 
 | Flag | Description |
 |---|---|
@@ -106,7 +106,7 @@ secdb audit linux ssh://ops@server.example.com:2222
 
 The `ssh://user@host:port` argument (the `ssh://` prefix is optional) is a shorthand for `--host`, `--user` and `--port`, and takes precedence over them. The connection uses your `ssh` client, so `~/.ssh/config`, the SSH agent and `known_hosts` apply, and host keys are always checked. With `--debug` (or `SECDB_DEBUG`), `ssh` runs with `-vvv` and its connection log goes to the debug output on stderr, which helps when a host can't be reached.
 
-On the target the command runs only read-only commands: `cat /etc/os-release`, `uname -m` and the package list of the distribution (`dpkg-query`, `rpm`, `apk`, or `/var/log/packages` on Slackware). Supported distributions: Debian, Ubuntu, RHEL, Rocky Linux, AlmaLinux, Oracle Linux, Amazon Linux, Fedora, SUSE, Alpine and Slackware.
+On the target the command runs only read-only commands: `cat /etc/os-release`, `uname -m` and the package list of the distribution (`dpkg-query`, `rpm`, `apk`, or `/var/log/packages` on Slackware). Supported distributions: Debian, Ubuntu, RHEL, CentOS, Rocky Linux, AlmaLinux, Oracle Linux, Amazon Linux, CBL-Mariner, Fedora, SUSE (SLES, openSUSE Leap), Alpine and Slackware.
 
 The `text` report starts with the target (`local`, `user @ host:port`, or the Docker image or container), the OS and version, the architecture and the number of packages. While it works, the command prints `Detected ...` and `Auditing ...` on stderr, only when stderr is a terminal.
 
@@ -166,6 +166,8 @@ Writes a [SARIF 2.1.0](https://sarifweb.azurewebsites.net/) report for GitHub Co
 
 Each result points at what was audited: the SBOM file for `audit sbom`, the manifest file and line for `audit manifest` (also with `--directory`), `OS/version` for `audit linux` and `audit docker`. `audit purl` has no file, so the location is empty.
 
+The automation ID of the run, which GitHub Code Scanning uses as the alert category, is `secdb-cli/audit-purl` for `audit purl`, `sbom` and `manifest`, and `secdb-cli/audit-linux` for `audit linux` and `docker`.
+
 A finding accepted in the ignore file stays in the report with a `suppressions` entry (`kind: external`, `status: accepted`, the rule's `reason` as justification), so Code Scanning doesn't open an alert for it.
 
 ### CSV
@@ -176,7 +178,7 @@ secdb audit sbom --file bom.json --output=csv > report.csv
 
 One row per advisory, with the columns `ID, Title, Severity, CVSS, CVEs, CWEs, Packages, URL, Ignored, Ignore Reason`. CVEs, CWEs and packages are joined with `"; "` in a single cell, and the text cells are quoted as in RFC 4180. A cell that starts with `=`, `+`, `-` or `@` gets a leading `'`, so a spreadsheet doesn't run it as a formula. `--view` has no effect on it.
 
-The columns are fixed. A custom layout can be written with `--output=template --template-file my.tmpl`, but note that the template receives the raw API response (one item per package with its `advisories`), not the per-advisory rows of the CSV.
+The columns are fixed. For a layout of your own use `--output=template --template-file my.tmpl`, or `--jq` (see [Output formats](output.md)): both work on the raw API response, one item per package with its `advisories`, not on the per-advisory rows of the CSV.
 
 ### Accepted risks (.secdbignore)
 

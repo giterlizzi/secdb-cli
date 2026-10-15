@@ -37,28 +37,33 @@ In GitHub Actions, GitLab CI and Gitea Actions the message also carries the proj
 
 ## Payload
 
-The `webhook` provider POSTs this JSON; Slack and Teams get the same data in their own format. At most 20 findings are included: `total` and `counts` cover all of them, `truncated` says how many were left out. `counts` has one key per severity (`critical`, `high`, `medium`, `low`, `info`), plus `unknown` for the findings whose advisory has no severity, so the counts always add up to `total`.
+The `webhook` provider POSTs this JSON; Slack and Teams get the same data in their own format. At most 20 findings are included: `total` and `counts` cover all of them, `truncated` says how many were left out (absent when none were). `counts` has one key per severity (`critical`, `high`, `medium`, `low`, `info`), plus `unknown` for the findings whose advisory has no severity, so the counts always add up to `total`.
 
 ```json
 {
-  "title": "SecDB audit: high severity (7 findings)",
+  "title": "SecDB audit: critical severity (6 findings)",
   "source": "SBOM (bom.json)",
-  "overall": "high",
-  "total": 7,
-  "counts": { "high": 2, "medium": 5 },
+  "overall": "critical",
+  "total": 6,
+  "counts": { "critical": 1, "high": 1, "medium": 4 },
   "findings": [
     {
       "source": "secdb-audit",
-      "source_id": "ZEN-...",
-      "name": "Advisory title",
-      "severity": "high",
-      "cves": ["CVE-2024-..."],
-      "purl": "pkg:maven/org.example/lib@1.2.3"
+      "source_id": "MAVEN:GHSA-7RJR-3Q55-VV33",
+      "name": "Incomplete fix for Apache Log4j vulnerability",
+      "severity": "critical",
+      "cves": ["CVE-2021-45046"],
+      "cwes": ["CWE-502", "CWE-917"],
+      "cvss_score": 9,
+      "package": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+      "purl": "pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1",
+      "references": ["https://github.com/advisories/GHSA-7rjr-3q55-vv33"]
     }
   ],
-  "truncated": 0,
   "ci": { "name": "github", "project": "org/repo", "run_url": "https://github.com/org/repo/actions/runs/..." },
   "base_url": "https://secdb.nttzen.cloud",
   "time": "2026-09-26T10:00:00Z"
 }
 ```
+
+A finding also has `summary` and `description` when the advisory does (left out above). `ci` is absent outside CI.
