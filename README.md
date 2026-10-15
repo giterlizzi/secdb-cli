@@ -71,9 +71,10 @@ Full-text search across CVEs, CWEs, advisories, NASL plugins and ExploitDB entri
 ```bash
 secdb cve CVE-2021-44228 -o json
 secdb cve CVE-2021-44228 -o template --template '{{.severity}}: {{.score}}'
+secdb search log4shell --jq '.hits[].id'
 ```
 
-See [Output formats](docs/output.md) for the template functions.
+`--jq` filters the JSON output with a jq expression, no `jq` install needed. See [Output formats](docs/output.md) for the template functions and `--jq`.
 
 ### Audit packages against known vulnerabilities
 

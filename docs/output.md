@@ -28,4 +28,26 @@ Templates can use the [Sprig](https://masterminds.github.io/sprig/) functions be
 | `cve_url`, `cwe_url`, `advisory_url` | The ZEN SecDB page of a CVE, CWE or advisory: `{{cve_url "https://secdb.nttzen.cloud" "CVE-2021-44228"}}` |
 | `path_url` | A ZEN SecDB page from a path the API returns, such as a search hit's `web_url`: `{{path_url "https://secdb.nttzen.cloud" .web_url}}` |
 
+## Filtering JSON with `--jq`
+
+`--jq` filters the JSON output with a [jq](https://jqlang.org/manual/) expression, without installing `jq`. It implies `-o json` (with any other `--output` it's an error), and works with every command that prints JSON:
+
+```bash
+# One search hit id per line
+secdb search log4shell --jq '.hits[].id'
+
+# The date a CVE entered the CISA KEV catalog
+secdb cve CVE-2021-44228 --jq '.cisa_kev.added_date // "not in KEV"'
+
+# The advisories of an audit, as severity and id
+secdb audit purl pkg:npm/lodash@4.17.20 --jq '.[].advisories[] | "\(.severity)\t\(.id)"'
+
+# Page through all the results: the next page, empty on the last one
+secdb search apache --jq '.pagination.next_page // empty'
+```
+
+Each result is printed on its own line: a string as is, without quotes (like `jq -r`), anything else as indented JSON. The expression sees the same field names as `-o json`, and an invalid one fails before the API is called. An expression can't read environment variables (`env` and `$ENV` are empty), so one copied from someone else can't print `SECDB_API_KEY`.
+
+With the `audit` commands, `--fail-on` still applies: the command prints the filtered output, then exits with status 2 when the threshold is reached.
+
 `NO_COLOR` set to any value prints the `text` output as plain Markdown in a terminal too.
