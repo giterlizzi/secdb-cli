@@ -110,6 +110,17 @@ func (o *auditOptions) validate() error {
 		return err
 	}
 	o.ignore = ignore
+
+	slog.Debug("audit options",
+		"view", o.view,
+		"fail_on", o.failOn,
+		"ignore_file", o.ignoreFile,
+		"ignore_rules", len(ignore.Ignore),
+		"show_unfixed", o.showUnfixed,
+		"notify", o.notify,
+		"providers", o.providers,
+		"notify_on", o.notifyOn,
+	)
 	return nil
 }
 
@@ -128,6 +139,8 @@ func parseSeverity(flag, value string) (string, error) {
 // linux and audit docker commands; they differ only in how they build the
 // inventory.Target.
 func runPackageAudit(target inventory.Target, opts *auditOptions) error {
+	slog.Debug("audit target", "target", target)
+
 	info, err := inventory.Collect(target)
 	if err != nil {
 		return err

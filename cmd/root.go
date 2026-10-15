@@ -107,6 +107,19 @@ func (g *globalOptions) validate(cmd *cobra.Command) error {
 	if g.apiKey != "" && strings.HasPrefix(g.baseURL, "http://") && !client.IsLoopback(g.baseURL) {
 		slog.Warn("--base-url uses plain http: the API key is sent unencrypted", "base_url", g.baseURL)
 	}
+
+	// The effective values, after the defaults; the API key itself never goes
+	// to the log, only whether one is set.
+	c := g.newClient()
+	slog.Debug("configuration",
+		"command", cmd.CommandPath(),
+		"base_url", c.BaseURL(),
+		"web_url", c.WebURL(),
+		"api_key", g.apiKey != "",
+		"output", g.output,
+		"template", g.template,
+		"template_file", g.templateFile,
+	)
 	return nil
 }
 
