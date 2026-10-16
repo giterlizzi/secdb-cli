@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-16
+
 ### Added
 
 - `secdb search`: full-text search across ZEN SecDB (CVEs, CWEs, advisories,
@@ -32,6 +34,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   category.
 - `audit linux` over SSH runs `ssh -vvv` with `--debug` (or `SECDB_DEBUG`), so
   the connection log shows up in the debug output.
+- `--debug` (or `SECDB_DEBUG`) logs the effective configuration: the global
+  options (whether an API key is set, never the key itself), the audit options
+  and the audited target.
 
 ### Fixed
 
@@ -343,7 +348,8 @@ Initial public release of the ZEN SecDB CLI.
   and custom `template`/`html` via Go templates.
 - Automatic background update check and a `version` command.
 
-[Unreleased]: https://github.com/giterlizzi/secdb-cli/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/giterlizzi/secdb-cli/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.3.1...v0.4.0
