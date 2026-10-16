@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"text/template"
+	"unicode"
 
 	"github.com/charmbracelet/glamour"
 	"golang.org/x/term"
@@ -39,8 +41,22 @@ func RenderText(w io.Writer, data any, templateName string, wrap ...int) error {
 		return fmt.Errorf("template %q execution: %w", templateName, err)
 	}
 
-	return writeMarkdown(w, buf.String(), width)
+	return writeMarkdown(w, stripControl(buf.String()), width)
 
+}
+
+// stripControl drops the control characters but newline and tab from s, and
+// replaces invalid UTF-8 with U+FFFD. The report shows data from third-party
+// feeds (titles, descriptions), and an escape sequence in one could change the
+// terminal's title, hide text or, on some terminals, write the clipboard. The
+// templates emit none (the colors come later, from Glamour).
+func stripControl(s string) string {
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' || !unicode.IsControl(r) {
+			return r
+		}
+		return -1
+	}, s)
 }
 
 // RenderTextPlain executes the named embedded template directly to w,

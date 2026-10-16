@@ -4,6 +4,6 @@
 "{{ $v | replace "\"" "\"\"" }}"
 {{- end -}}
 ID,Title,Severity,CVSS,CVEs,CWEs,Packages,URL,Ignored,Ignore Reason
-{{- range .Results}}
+{{- range .}}
 {{template "csvcell" .ID}},{{template "csvcell" .Title}},{{template "csvcell" (.Severity | upper)}},{{if gt .CVSSScore 0.0}}{{.CVSSScore}}{{end}},{{template "csvcell" (join "; " .CVEs)}},{{template "csvcell" (join "; " .CWEs)}},{{template "csvcell" (join "; " .Packages)}},{{template "csvcell" .URL}},{{.Ignored}},{{template "csvcell" .IgnoreReason}}
 {{- end}}

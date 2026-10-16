@@ -91,22 +91,22 @@ type ssvcBulkRequest struct {
 // SSVCBulkResponse is one CVE's entry in a bulk SSVC response.
 type SSVCBulkResponse struct {
 	CVE struct {
-		ID    string `json:"id" yaml:"id"`
-		Title string `json:"title" yaml:"title"`
-	} `json:"cve" yaml:"cve"`
-	SSVC   SSVCResponse `json:"ssvc" yaml:"ssvc"`
-	Status string       `json:"status" yaml:"status"`
+		ID    string `json:"id"`
+		Title string `json:"title"`
+	} `json:"cve"`
+	SSVC   SSVCResponse `json:"ssvc"`
+	Status string       `json:"status"`
 
-	VectorString string `json:"vector_string" yaml:"vector_string"`
+	VectorString string `json:"vector_string"`
 }
 
 // SSVCResponse is the SSVC decision for a CVE.
 type SSVCResponse struct {
-	Exploitation           string `json:"exploitation" yaml:"exploitation"`
-	Automatable            string `json:"automatable" yaml:"automatable"`
-	TechnicalImpact        string `json:"technical_impact" yaml:"technical_impact"`
-	MissionPrevalence      string `json:"mission_prevalence" yaml:"mission_prevalence"`
-	PublicWellBeingImpact  string `json:"public_well_being_impact" yaml:"public_well_being_impact"`
-	MissionWellBeingImpact string `json:"mission_well_being_impact" yaml:"mission_well_being_impact"`
-	Decision               string `json:"decision" yaml:"decision"`
+	Exploitation           string `json:"exploitation"`
+	Automatable            string `json:"automatable"`
+	TechnicalImpact        string `json:"technical_impact"`
+	MissionPrevalence      string `json:"mission_prevalence"`
+	PublicWellBeingImpact  string `json:"public_well_being_impact"`
+	MissionWellBeingImpact string `json:"mission_well_being_impact"`
+	Decision               string `json:"decision"`
 }

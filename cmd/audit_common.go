@@ -17,7 +17,6 @@ import (
 	"github.com/giterlizzi/secdb-cli/internal/notify"
 	"github.com/giterlizzi/secdb-cli/internal/output"
 	"github.com/giterlizzi/secdb-cli/internal/report"
-	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/spf13/cobra"
 )
@@ -35,14 +34,23 @@ type auditOptions struct {
 	ignore *audit.IgnoreFile
 }
 
-type auditRenderConfig struct {
-	data     []client.AuditItem
-	opts     *auditOptions
-	webURL   string // web-GUI base for the permalinks, footer and notifications
-	meta     []report.MetaItem
+// auditTarget describes what an audit command audited, for the report.
+type auditTarget struct {
+	// source names it for the notifications, e.g. "SBOM (bom.json)".
+	source string
+
+	// meta are the rows of the text report header, e.g. "PURLs scanned: 3".
+	meta []report.MetaItem
+
+	// template is the family of the text templates and of the SARIF
+	// automation ID: "audit-purl" or "audit-linux" (set by runPURLAudit and
+	// runPackageAudit).
 	template string
-	sources  map[string]output.SourceLocation
-	source   string
+
+	// sarifFile is the SARIF location of every finding (the SBOM, the OS),
+	// unless sarifSources has the finding's PURL (audit manifest).
+	sarifFile    string
+	sarifSources map[string]output.SourceLocation
 }
 
 // addFlags registers the shared audit flags on cmd, and validates them in its
@@ -102,6 +110,17 @@ func (o *auditOptions) validate() error {
 		return err
 	}
 	o.ignore = ignore
+
+	slog.Debug("audit options",
+		"view", o.view,
+		"fail_on", o.failOn,
+		"ignore_file", o.ignoreFile,
+		"ignore_rules", len(ignore.Ignore),
+		"show_unfixed", o.showUnfixed,
+		"notify", o.notify,
+		"providers", o.providers,
+		"notify_on", o.notifyOn,
+	)
 	return nil
 }
 
@@ -116,30 +135,30 @@ func parseSeverity(flag, value string) (string, error) {
 }
 
 // runPackageAudit collects the OS/package inventory of the target, audits it
-// against ZEN SecDB, renders the result in the requested format, and applies
-// --fail-on. It is the shared body of the audit linux and audit docker commands;
-// they differ only in how they build the inventory.Target.
+// against ZEN SecDB and reports the result. It is the shared body of the audit
+// linux and audit docker commands; they differ only in how they build the
+// inventory.Target.
 func runPackageAudit(target inventory.Target, opts *auditOptions) error {
+	slog.Debug("audit target", "target", target)
+
 	info, err := inventory.Collect(target)
 	if err != nil {
 		return err
 	}
 
-	util.Statusf("Detected %s %s %s (%d packages)\n", info.OS, info.Version, info.Arch, len(info.Packages))
-	util.Statusf("Auditing %d packages against ZEN SecDB...\n", len(info.Packages))
+	statusf("Detected %s %s %s (%d packages)\n", info.OS, info.Version, info.Arch, len(info.Packages))
+	statusf("Auditing %d packages against ZEN SecDB...\n", len(info.Packages))
 
-	client := newSecDbClient()
-	data, err := client.LinuxAudit(info.OS, info.Version, info.Arch, info.Packages)
+	client := global.newClient()
+	items, err := client.LinuxAudit(info.OS, info.Version, info.Arch, info.Packages)
 	if err != nil {
 		return err
 	}
 
-	return renderAudit(auditRenderConfig{
-		data:     data,
-		opts:     opts,
-		webURL:   client.WebURL(),
-		template: "audit-linux",
-		source:   fmt.Sprintf("%s/%s", info.OS, info.Version),
+	return reportAudit(items, opts, client.WebURL(), auditTarget{
+		source:    target.Describe(),
+		template:  "audit-linux",
+		sarifFile: fmt.Sprintf("%s/%s", info.OS, info.Version),
 		meta: []report.MetaItem{
 			{Label: "Target", Value: target.Describe()},
 			{Label: "OS", Value: fmt.Sprintf("%s %s", info.OS, info.Version)},
@@ -149,90 +168,107 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 	})
 }
 
-// runPURLAudit audits purls against ZEN SecDB and renders the result with the
+// runPURLAudit audits purls against ZEN SecDB and reports the result with the
 // audit-purl templates. It is the shared tail of the audit purl, sbom and
-// manifest commands: cfg carries only what differs between them (meta rows,
-// SARIF source/sources), runPURLAudit fills in the rest.
-func runPURLAudit(purls []string, opts *auditOptions, cfg auditRenderConfig) error {
-	client := newSecDbClient()
-	data, err := client.PURLAudit(purls)
+// manifest commands, which describe what they read in target.
+func runPURLAudit(purls []string, opts *auditOptions, target auditTarget) error {
+	client := global.newClient()
+	items, err := client.PURLAudit(purls)
 	if err != nil {
 		return err
 	}
 
-	cfg.data = data
-	cfg.opts = opts
-	cfg.webURL = client.WebURL()
-	cfg.template = "audit-purl"
-	return renderAudit(cfg)
+	target.template = "audit-purl"
+	return reportAudit(items, opts, client.WebURL(), target)
 }
 
-// renderAudit is the pipeline every audit command ends with: it writes the
-// results in the requested format, sends the notifications (--notify), then
-// applies --fail-on. All flags were validated up front (auditOptions.validate).
-func renderAudit(cfg auditRenderConfig) error {
-	overall := audit.OverallSeverity(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
+// reportAudit is the pipeline every audit command ends with: it shapes the
+// items once, writes them in the --output format, sends the notifications
+// (--notify), then applies --fail-on. webURL is the web-GUI base of the
+// permalinks, the report footer and the notifications. All flags were
+// validated up front (auditOptions.validate).
+func reportAudit(items []client.AuditItem, opts *auditOptions, webURL string, target auditTarget) error {
+	res := audit.Analyze(items, opts.ignore, opts.showUnfixed)
 
-	if err := writeAuditOutput(cfg); err != nil {
+	if err := writeAuditOutput(res, opts, webURL, target); err != nil {
 		return err
 	}
 
-	if cfg.opts.notify {
-		if err := sendNotifications(cfg, overall); err != nil {
+	if opts.notify {
+		if err := sendNotifications(res, opts, webURL, target.source); err != nil {
 			return err
 		}
 	}
 
-	return failOnError(cfg.opts.failOn, overall)
+	return failOnError(opts.failOn, res.Overall)
 }
 
-// writeAuditOutput writes the audit results to stdout in the --output format.
-func writeAuditOutput(cfg auditRenderConfig) error {
-	switch outputFormat {
+// writeAuditOutput writes the audit result to stdout in the --output format.
+func writeAuditOutput(res audit.Result, opts *auditOptions, webURL string, target auditTarget) error {
+	switch global.output {
 	case "text":
-		return writeAuditText(cfg)
+		return writeAuditText(res, opts, webURL, target)
 	case "sarif":
-		r := audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
-		return output.WriteSARIF(os.Stdout, r.Results.([]audit.AdvisoryResult), cfg.source, cfg.sources)
+		return output.WriteSARIF(os.Stdout, res.Advisories, output.SARIFOptions{
+			AutomationID: "secdb-cli/" + target.template,
+			File:         target.sarifFile,
+			Sources:      target.sarifSources,
+		})
 	case "csv":
-		r := audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
-		return output.WriteCSV(os.Stdout, r, "audit-details-csv")
+		return output.WriteCSV(os.Stdout, res.Advisories)
 	default:
-		if err := output.Render(os.Stdout, cfg.data, output.Format(outputFormat), newOutputOptions()); err != nil {
+		if err := output.Render(os.Stdout, res.Items, output.Format(global.output), global.outputOptions()); err != nil {
 			return fmt.Errorf("failed to render output: %w", err)
 		}
 		return nil
 	}
 }
 
-// writeAuditText renders the --view (summary or details) text report, headed by
-// the command's metadata rows and, when unfixed vulnerabilities were hidden, a
-// warning row that points at --show-unfixed.
-func writeAuditText(cfg auditRenderConfig) error {
-	meta := append(slices.Clone(cfg.meta), ciMeta(ci.Detect())...)
-	if !cfg.opts.showUnfixed {
-		if n := audit.UnfixedCount(cfg.data); n > 0 {
-			meta = append(meta, report.MetaItem{
-				Label: "Unfixed",
-				Value: fmt.Sprintf("⚠️ %d hidden (run with --show-unfixed to list them)", n),
-			})
+// writeAuditText renders the --view (summary or details) text report. Its
+// header has the command's rows, the CI run, a warning when unfixed
+// vulnerabilities were hidden (pointing at --show-unfixed) and, in the details
+// view, how many advisories the ignore file accepts.
+func writeAuditText(res audit.Result, opts *auditOptions, webURL string, target auditTarget) error {
+	r := report.Report{
+		Meta:    slices.Concat(target.meta, ciMeta(ci.Detect())),
+		Results: res.Packages,
+		BaseURL: webURL,
+	}
+	if !opts.showUnfixed && res.Unfixed > 0 {
+		r.Meta = append(r.Meta, report.MetaItem{
+			Label: "Unfixed",
+			Value: fmt.Sprintf("⚠️ %d hidden (run with --show-unfixed to list them)", res.Unfixed),
+		})
+	}
+	if opts.view == "details" {
+		r.Results = res.Advisories
+		if item, ok := ignoredMeta(res.Ignored, res.PartlyIgnored); ok {
+			r.Meta = append(r.Meta, item)
 		}
 	}
 
-	var r report.Report
-	if cfg.opts.view == "details" {
-		r = audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
-	} else {
-		r.Results = audit.SummarizePURLAudit(cfg.data, cfg.opts.showUnfixed)
-	}
-	r.BaseURL = cfg.webURL
-	r.PrependMeta(meta...)
-
-	templateName := fmt.Sprintf("%s-%s", cfg.template, cfg.opts.view)
+	templateName := target.template + "-" + opts.view
 	if err := output.RenderText(os.Stdout, r, templateName); err != nil {
 		return fmt.Errorf("failed to render details: %w", err)
 	}
 	return nil
+}
+
+// ignoredMeta is the text header's "Ignored" row: the fully ignored advisories,
+// plus those accepted for some packages only (false when there are none).
+func ignoredMeta(full, partial int) (report.MetaItem, bool) {
+	var value string
+	switch {
+	case full == 0 && partial == 0:
+		return report.MetaItem{}, false
+	case partial == 0:
+		value = strconv.Itoa(full)
+	case full == 0:
+		value = fmt.Sprintf("%d for some packages only", partial)
+	default:
+		value = fmt.Sprintf("%d (+%d for some packages only)", full, partial)
+	}
+	return report.MetaItem{Label: "Ignored", Value: value}, true
 }
 
 // ciMeta returns the text-report header rows describing the CI run the audit
@@ -261,44 +297,41 @@ func failOnError(failOn, overall string) error {
 	}
 }
 
-func buildNotifyMessage(cfg auditRenderConfig, rep report.Report, overall string) notify.Message {
+// sendNotifications notifies the --providers when the overall severity
+// reaches --notify-on. Delivery is best-effort: a failed provider is only
+// logged.
+func sendNotifications(res audit.Result, opts *auditOptions, webURL, source string) error {
+	if res.Overall == "" || audit.SeverityLevels[res.Overall] < audit.SeverityLevels[opts.notifyOn] {
+		return nil
+	}
+	providers, err := notify.Resolve(opts.providers)
+	if err != nil {
+		return err
+	}
+	msg := buildNotifyMessage(res.Advisories, res.Overall, webURL, source)
+	for _, e := range notify.Send(providers, msg) {
+		slog.Warn("notification failed", "error", e)
+	}
+	return nil
+}
+
+// buildNotifyMessage turns the advisories into the notification message: one
+// finding per affected package, except the packages an ignore rule accepts.
+func buildNotifyMessage(advisories []audit.AdvisoryResult, overall, webURL, source string) notify.Message {
 	var findings []finding.Finding
-	advisories, _ := rep.Results.([]audit.AdvisoryResult)
 	for _, adv := range advisories {
 		for _, f := range adv.Findings() {
-			// Skip only the packages an ignore rule accepts, not the whole advisory.
 			if ignored, _ := adv.IgnoredFor(f.PURL); !ignored {
 				findings = append(findings, f)
 			}
 		}
 	}
-
-	// The Source/Target context rows live in cfg.meta (renderAudit prepends them
-	// to the text report), not in the GroupByAdvisory report passed as rep.
-	source := (&report.Report{Meta: cfg.meta}).MetaValue("Source", "Target")
 	if source == "" {
 		source = "audit"
 	}
 
 	msg := notify.NewMessage(source, overall, findings)
 	msg.CI = ci.Detect()
-	msg.BaseURL = cfg.webURL
+	msg.BaseURL = webURL
 	return msg
-}
-
-func sendNotifications(cfg auditRenderConfig, overall string) error {
-	// --notify-on and --providers are validated up front (auditOptions.validate).
-	if overall == "" || audit.SeverityLevels[overall] < audit.SeverityLevels[cfg.opts.notifyOn] {
-		return nil
-	}
-	providers, err := notify.Resolve(cfg.opts.providers)
-	if err != nil {
-		return err
-	}
-	rep := audit.GroupByAdvisory(cfg.data, cfg.opts.ignore, cfg.opts.showUnfixed)
-	msg := buildNotifyMessage(cfg, rep, overall)
-	for _, e := range notify.Send(providers, msg) {
-		slog.Warn("notification failed", "error", e)
-	}
-	return nil
 }

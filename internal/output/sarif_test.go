@@ -13,7 +13,8 @@ import (
 
 func TestWriteSARIF_Empty(t *testing.T) {
 	var buf bytes.Buffer
-	if err := WriteSARIF(&buf, []audit.AdvisoryResult{}, "bom.json", nil); err != nil {
+	opts := SARIFOptions{AutomationID: "secdb-cli/audit-linux", File: "bom.json"}
+	if err := WriteSARIF(&buf, []audit.AdvisoryResult{}, opts); err != nil {
 		t.Fatalf("WriteSARIF: %v", err)
 	}
 
@@ -25,7 +26,10 @@ func TestWriteSARIF_Empty(t *testing.T) {
 					Name string `json:"name"`
 				} `json:"driver"`
 			} `json:"tool"`
-			Results []any `json:"results"`
+			Results           []any `json:"results"`
+			AutomationDetails struct {
+				ID string `json:"id"`
+			} `json:"automationDetails"`
 		} `json:"runs"`
 	}
 
@@ -41,6 +45,9 @@ func TestWriteSARIF_Empty(t *testing.T) {
 	}
 	if out.Runs[0].Tool.Driver.Name != "secdb-cli" {
 		t.Errorf("driver name = %q, want %q", out.Runs[0].Tool.Driver.Name, "secdb-cli")
+	}
+	if got := out.Runs[0].AutomationDetails.ID; got != opts.AutomationID {
+		t.Errorf("automation ID = %q, want %q", got, opts.AutomationID)
 	}
 	if len(out.Runs[0].Results) != 0 {
 		t.Errorf("expected no results for no advisories, got %d", len(out.Runs[0].Results))
@@ -59,7 +66,7 @@ func TestWriteSARIF_OneResultPerPackage(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := WriteSARIF(&buf, advisories, "bom.json", nil); err != nil {
+	if err := WriteSARIF(&buf, advisories, SARIFOptions{File: "bom.json"}); err != nil {
 		t.Fatalf("WriteSARIF: %v", err)
 	}
 
@@ -115,7 +122,7 @@ func TestWriteSARIF_PerFileAttribution(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := WriteSARIF(&buf, advisories, "fallback.txt", sources); err != nil {
+	if err := WriteSARIF(&buf, advisories, SARIFOptions{File: "fallback.txt", Sources: sources}); err != nil {
 		t.Fatalf("WriteSARIF: %v", err)
 	}
 
@@ -277,7 +284,7 @@ func TestWriteSARIF_Suppressions(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := WriteSARIF(&buf, advisories, "bom.json", nil); err != nil {
+	if err := WriteSARIF(&buf, advisories, SARIFOptions{File: "bom.json"}); err != nil {
 		t.Fatalf("WriteSARIF: %v", err)
 	}
 
@@ -344,7 +351,7 @@ func TestWriteSARIF_SuppressionDefaultJustification(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if err := WriteSARIF(&buf, advisories, "", nil); err != nil {
+	if err := WriteSARIF(&buf, advisories, SARIFOptions{File: ""}); err != nil {
 		t.Fatalf("WriteSARIF: %v", err)
 	}
 

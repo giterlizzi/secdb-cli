@@ -1,5 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
+// Package inventory gathers the OS identity and installed-package list of a
+// target system (local, remote over SSH, or a Docker image/container) so it can
+// be audited against ZEN SecDB. It executes only a fixed, read-only set of
+// enumeration commands.
+//
+// The package is split by concern: target.go defines where the commands run
+// (Target) and its checks, exec.go how they run (local shell, SSH, Docker),
+// and this file what runs and how its output is read (Collect).
 package inventory
 
 import (
@@ -62,37 +70,11 @@ func Collect(t Target) (*SystemInfo, error) {
 		return nil, fmt.Errorf("no installed packages were collected for %q", osr.ID)
 	}
 
-	os, version := normalizeOSVersion(osr)
+	osName, version := normalizeOSVersion(osr)
 
-	slog.Info("collected system info", "os", os, "version", version, "arch", arch, "packages", len(pkgs))
+	slog.Info("collected system info", "os", osName, "version", version, "arch", arch, "packages", len(pkgs))
 
-	return &SystemInfo{OS: os, Version: version, Arch: arch, Packages: pkgs}, nil
-}
-
-// checkLocalSupported rejects a local audit on a non-Linux host. A local audit
-// reads Linux-specific files and package managers, so it only makes sense on
-// Linux; a remote (SSH) or Docker target may be Linux regardless of the OS this
-// CLI runs on, so the check is limited to local execution.
-func checkLocalSupported(t Target, goos string) error {
-	if t.isLocal() && goos != "linux" {
-		return fmt.Errorf("local audit is only supported on Linux (this is %s); use a remote host or Docker target to audit a Linux system from %s", goos, goos)
-	}
-	return nil
-}
-
-// checkDockerName rejects a Docker image or container name starting with "-".
-// The name is a discrete argv element, so it can't inject shell commands, but
-// docker would still parse it as one of its own options (e.g.
-// --image=--privileged or --image=--volume=/:/host); no valid image or
-// container name starts with a dash.
-func checkDockerName(t Target) error {
-	if strings.HasPrefix(t.Image, "-") {
-		return fmt.Errorf("invalid --image %q: a Docker name can't start with \"-\"", t.Image)
-	}
-	if strings.HasPrefix(t.Container, "-") {
-		return fmt.Errorf("invalid --container %q: a Docker name can't start with \"-\"", t.Container)
-	}
-	return nil
+	return &SystemInfo{OS: osName, Version: version, Arch: arch, Packages: pkgs}, nil
 }
 
 func collectOSRelease(t Target) (OSRelease, error) {
@@ -175,14 +157,14 @@ func collectPackages(t Target, osID string) ([]string, error) {
 
 // normalizeOSVersion maps os-release fields to the OS/version identifiers the
 // ZEN SecDB /api/v1/audit/linux endpoint expects.
-func normalizeOSVersion(osr OSRelease) (os, version string) {
-	os = osr.ID
+func normalizeOSVersion(osr OSRelease) (osName, version string) {
+	osName = osr.ID
 	version = osr.VersionID
 
 	switch osr.ID {
 	case "ol":
-		os = "oraclelinux"
-		version = fmt.Sprintf("%s-%s", os, osr.VersionID)
+		osName = "oraclelinux"
+		version = fmt.Sprintf("%s-%s", osName, osr.VersionID)
 	case "ubuntu", "debian":
 		if osr.VersionCodename != "" {
 			version = osr.VersionCodename
@@ -201,5 +183,5 @@ func normalizeOSVersion(osr OSRelease) (os, version string) {
 		}
 	}
 
-	return os, version
+	return osName, version
 }

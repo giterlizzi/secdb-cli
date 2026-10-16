@@ -5,12 +5,12 @@ package output
 import (
 	"io"
 
-	"github.com/giterlizzi/secdb-cli/internal/report"
+	"github.com/giterlizzi/secdb-cli/internal/audit"
 )
 
-// WriteCSV renders a report as CSV using the embedded templates/*.tmpl. The
-// whole CSV layout (columns, quoting, formatting) lives in that template, so
-// it can be changed without touching Go code.
-func WriteCSV(w io.Writer, r report.Report, template string) error {
-	return RenderTextPlain(w, r, template)
+// WriteCSV writes the advisories as CSV, one row per advisory. The whole layout
+// (columns, quoting, formatting) lives in the audit-details-csv template, so it
+// can be changed without touching Go code.
+func WriteCSV(w io.Writer, advisories []audit.AdvisoryResult) error {
+	return RenderTextPlain(w, advisories, "audit-details-csv")
 }

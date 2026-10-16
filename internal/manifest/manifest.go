@@ -3,7 +3,7 @@
 // Package manifest turns a dependency manifest (go.mod, package-lock.json,
 // requirements.txt, Gemfile.lock, ...) into a list of PURL-resolved
 // dependencies. It's the shared engine behind the "audit manifest" command and
-// the future "lsp" server: each parser records the source Range of every
+// the "lsp" server: each parser records the source Range of every
 // dependency, which the CLI ignores but the LSP uses to attach diagnostics.
 package manifest
 
@@ -40,6 +40,18 @@ type Dependency struct {
 	Version   string
 	Direct    bool
 	Range     Range
+}
+
+// PURLs returns the PURLs of the dependencies that have one, in order. They are
+// not validated nor de-duplicated: see audit.NormalizePURLs.
+func PURLs(deps []Dependency) []string {
+	purls := make([]string, 0, len(deps))
+	for _, d := range deps {
+		if d.PURL != "" {
+			purls = append(purls, d.PURL)
+		}
+	}
+	return purls
 }
 
 // Parser turns the contents of one manifest format into dependencies. filename

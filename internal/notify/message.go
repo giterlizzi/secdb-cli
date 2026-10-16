@@ -26,7 +26,7 @@ type Message struct {
 	Source    string            `json:"source"`              // what was scanned: manifest path, "SBOM (bom.json)", linux target
 	Overall   string            `json:"overall"`             // highest severity (lowercase), drives color/emoji
 	Total     int               `json:"total"`               // total findings, before capping
-	Counts    map[string]int    `json:"counts"`              // findings per severity, e.g. {"critical":1,"high":2}
+	Counts    map[string]int    `json:"counts"`              // findings per severity, e.g. {"critical":1,"high":2}; "unknown" for a missing one
 	Findings  []finding.Finding `json:"findings"`            // severity-sorted, capped to maxFindings
 	Truncated int               `json:"truncated,omitempty"` // findings omitted beyond the cap (0 = none)
 
@@ -42,7 +42,7 @@ type Message struct {
 func NewMessage(source, overall string, findings []finding.Finding) Message {
 	counts := map[string]int{}
 	for _, f := range findings {
-		counts[f.Severity]++
+		counts[severityBucket(f.Severity)]++
 	}
 
 	total := len(findings)

@@ -9,11 +9,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	lspNoDiscovery bool
-	lspShowUnfixed bool
-	lspIgnoreFile  string
-)
+// lspOptions are the flags of "lsp".
+type lspOptions struct {
+	noDiscovery bool
+	showUnfixed bool
+	ignoreFile  string
+}
+
+var lspOpts lspOptions
 
 var lspCmd = &cobra.Command{
 	Use:     "lsp",
@@ -126,22 +129,25 @@ var lspCmd = &cobra.Command{
 		  }
 	`),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return lsp.NewServer(newSecDbClient(), lsp.Options{
-			Discovery:       !lspNoDiscovery,
-			ShowUnfixed:     lspShowUnfixed,
-			IgnoreFile:      lspIgnoreFile,
+		return lsp.NewServer(global.newClient(), lsp.Options{
+			Discovery:       !lspOpts.noDiscovery,
+			ShowUnfixed:     lspOpts.showUnfixed,
+			IgnoreFile:      lspOpts.ignoreFile,
 			UpdateAvailable: updateCheckCh,
 		}).Run()
 	},
 }
 
 func init() {
-	lspCmd.Flags().BoolVar(&lspNoDiscovery, "no-discovery", false,
-		"Disable workspace discovery (only audit manifests as they are opened)")
-	lspCmd.Flags().BoolVar(&lspShowUnfixed, "show-unfixed", false,
-		"Also report vulnerabilities that have no fix available (hidden by default)")
-	lspCmd.Flags().StringVar(&lspIgnoreFile, "ignore-file", "",
-		"YAML file of ignore rules (default: the nearest .secdbignore up to the workspace root)")
-
 	rootCmd.AddCommand(lspCmd)
+	lspOpts.addFlags(lspCmd)
+}
+
+func (o *lspOptions) addFlags(cmd *cobra.Command) {
+	cmd.Flags().BoolVar(&o.noDiscovery, "no-discovery", false,
+		"Disable workspace discovery (only audit manifests as they are opened)")
+	cmd.Flags().BoolVar(&o.showUnfixed, "show-unfixed", false,
+		"Also report vulnerabilities that have no fix available (hidden by default)")
+	cmd.Flags().StringVar(&o.ignoreFile, "ignore-file", "",
+		"YAML file of ignore rules (default: the nearest .secdbignore up to the workspace root)")
 }

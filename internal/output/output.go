@@ -4,6 +4,7 @@
 package output
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -26,10 +27,14 @@ const (
 	YAML     Format = "yaml"
 )
 
-// Options holds renderer options for the template/HTML formats.
+// Options holds renderer options: the user template (template/html formats)
+// and the --jq expression (json format).
 type Options struct {
 	TemplateFile       string
 	TemplateExpression string
+
+	// JQ, when set, filters the json output (see ParseJQ).
+	JQ *JQ
 }
 
 // SourceLocation maps a PURL to the manifest file and line it came from, for
@@ -56,14 +61,52 @@ func funcMap() template.FuncMap {
 	fm["cve_url"] = weblink.CVE
 	fm["cwe_url"] = weblink.CWE
 	fm["advisory_url"] = weblink.Advisory
+	fm["path_url"] = weblink.Path
+	// Sprig's abbrev and trunc count bytes and can cut a character in two.
+	fm["abbrev"] = abbrev
+	fm["trunc"] = trunc
 	return fm
+}
+
+// abbrev is Sprig's abbrev counting characters, not bytes: s cut to width
+// characters, the last three replaced by "...". A width under 4 leaves s as is.
+func abbrev(width int, s string) string {
+	r := []rune(s)
+	if width < 4 || len(r) <= width {
+		return s
+	}
+	return string(r[:width-3]) + "..."
+}
+
+// trunc is Sprig's trunc counting characters, not bytes: the first n
+// characters of s, or the last -n when n is negative.
+func trunc(n int, s string) string {
+	r := []rune(s)
+	switch {
+	case n >= 0 && len(r) > n:
+		return string(r[:n])
+	case n < 0 && len(r) > -n:
+		return string(r[len(r)+n:])
+	}
+	return s
 }
 
 // Render writes data to w in the given format.
 func Render(w io.Writer, data any, format Format, opts Options) error {
+	if format == JSON && opts.JQ == nil {
+		return renderJSON(w, data)
+	}
+
+	// yaml, templates and --jq see the data as -o json shows it, with the
+	// API's field names (.base_score, .purl), not the Go ones (.BaseScore,
+	// .PURL): yaml.v3 ignores the json tags and a template reads the Go fields.
+	data, err := jsonValue(data)
+	if err != nil {
+		return err
+	}
 	switch format {
 	case JSON:
-		return renderJSON(w, data)
+		return opts.JQ.write(w, data)
 	case YAML:
 		return renderYAML(w, data)
 	case Template:
@@ -73,6 +116,20 @@ func Render(w io.Writer, data any, format Format, opts Options) error {
 	default:
 		return fmt.Errorf("unknown renderer: %q (json, yaml, template, html)", format)
 	}
+}
+
+// jsonValue returns data as the generic value (maps, slices, strings, float64,
+// ...) its JSON encoding decodes to.
+func jsonValue(data any) (any, error) {
+	b, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("JSON encode: %w", err)
+	}
+	var v any
+	if err := json.Unmarshal(b, &v); err != nil {
+		return nil, fmt.Errorf("JSON decode: %w", err)
+	}
+	return v, nil
 }
 
 // SeverityMarkdown returns a colored emoji badge for a severity, for text/Markdown output.

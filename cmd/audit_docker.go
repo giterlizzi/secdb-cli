@@ -11,11 +11,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	dockerImage     string
-	dockerContainer string
-	dockerOpts      auditOptions
-)
+// dockerOptions are the flags of "audit docker".
+type dockerOptions struct {
+	image     string
+	container string
+	audit     auditOptions
+}
+
+var dockerOpts dockerOptions
 
 var dockerAuditCmd = &cobra.Command{
 	Use:   "docker",
@@ -48,25 +51,32 @@ var dockerAuditCmd = &cobra.Command{
 	`),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if (dockerImage == "") == (dockerContainer == "") {
-			return errors.New("provide exactly one of --image or --container")
+		target, err := dockerOpts.target()
+		if err != nil {
+			return err
 		}
-
-		target := inventory.Target{
-			Image:     dockerImage,
-			Container: dockerContainer,
-		}
-		return runPackageAudit(target, &dockerOpts)
+		return runPackageAudit(target, &dockerOpts.audit)
 	},
 }
 
 func init() {
 	auditCmd.AddCommand(dockerAuditCmd)
+	dockerOpts.addFlags(dockerAuditCmd)
+}
 
-	dockerAuditCmd.Flags().StringVar(&dockerImage, "image", "",
+func (o *dockerOptions) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.image, "image", "",
 		"Audit a local Docker image (run ephemerally)")
-	dockerAuditCmd.Flags().StringVar(&dockerContainer, "container", "",
+	cmd.Flags().StringVar(&o.container, "container", "",
 		"Audit a running local Docker container")
 
-	dockerOpts.addFlags(dockerAuditCmd)
+	o.audit.addFlags(cmd)
+}
+
+// target returns the image or container to audit: exactly one must be given.
+func (o *dockerOptions) target() (inventory.Target, error) {
+	if (o.image == "") == (o.container == "") {
+		return inventory.Target{}, errors.New("provide exactly one of --image or --container")
+	}
+	return inventory.Target{Image: o.image, Container: o.container}, nil
 }

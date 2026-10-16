@@ -26,3 +26,12 @@ func CWE(webURL, id string) string {
 func Advisory(webURL, id string) string {
 	return join(webURL, "security-advisory", "detail", id)
 }
+
+// Path returns the permalink to a web-GUI path the API already built, such as
+// a search hit's path (e.g. "/cve/detail/CVE-2021-44228"); empty when path is.
+func Path(webURL, path string) string {
+	if path == "" {
+		return ""
+	}
+	return join(webURL, path)
+}

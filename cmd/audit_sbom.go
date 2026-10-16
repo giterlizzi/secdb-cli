@@ -8,16 +8,18 @@ import (
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
 	"github.com/giterlizzi/secdb-cli/internal/report"
-	"github.com/giterlizzi/secdb-cli/internal/util"
 
 	"github.com/MakeNowJust/heredoc/v2"
 	"github.com/spf13/cobra"
 )
 
-var (
-	sbomAuditFile string
-	sbomOpts      auditOptions
-)
+// sbomOptions are the flags of "audit sbom".
+type sbomOptions struct {
+	file  string
+	audit auditOptions
+}
+
+var sbomOpts sbomOptions
 
 var sbomAuditCmd = &cobra.Command{
 	Use: "sbom --file <FILE>",
@@ -47,20 +49,22 @@ var sbomAuditCmd = &cobra.Command{
 	`),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		purls, err := audit.ReadPURLsFromSBOM(sbomAuditFile)
+		purls, err := audit.ReadPURLsFromSBOM(sbomOpts.file)
 		if err != nil {
 			return err
 		}
 
-		purls = util.Deduplicate(audit.ValidatePURLs(purls))
+		purls = audit.NormalizePURLs(purls)
 		if len(purls) == 0 {
-			return fmt.Errorf("no PURLs found in %s", sbomAuditFile)
+			return fmt.Errorf("no PURLs found in %s", sbomOpts.file)
 		}
 
-		return runPURLAudit(purls, &sbomOpts, auditRenderConfig{
-			source: sbomAuditFile,
+		source := "SBOM (" + sbomOpts.file + ")"
+		return runPURLAudit(purls, &sbomOpts.audit, auditTarget{
+			source:    source,
+			sarifFile: sbomOpts.file,
 			meta: []report.MetaItem{
-				{Label: "Source", Value: "SBOM (" + sbomAuditFile + ")"},
+				{Label: "Source", Value: source},
 				{Label: "PURLs scanned", Value: strconv.Itoa(len(purls))},
 			},
 		})
@@ -69,10 +73,13 @@ var sbomAuditCmd = &cobra.Command{
 
 func init() {
 	auditCmd.AddCommand(sbomAuditCmd)
-
-	sbomAuditCmd.Flags().StringVarP(&sbomAuditFile, "file", "f", "",
-		"Path to the CycloneDX SBOM (JSON) to audit")
-	_ = sbomAuditCmd.MarkFlagRequired("file")
-
 	sbomOpts.addFlags(sbomAuditCmd)
+}
+
+func (o *sbomOptions) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVarP(&o.file, "file", "f", "",
+		"Path to the CycloneDX SBOM (JSON) to audit")
+	_ = cmd.MarkFlagRequired("file")
+
+	o.audit.addFlags(cmd)
 }

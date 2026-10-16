@@ -26,14 +26,7 @@ func (s *Server) auditManifest(ctx *glsp.Context, uri protocol.DocumentUri, cont
 		return 0, err
 	}
 
-	purls := make([]string, 0, len(deps))
-	for _, d := range deps {
-		if d.PURL != "" {
-			slog.Debug("found dependency", "file", filename, "dependency", d)
-			purls = append(purls, d.PURL)
-		}
-	}
-	purls = audit.ValidatePURLs(purls)
+	purls := audit.NormalizePURLs(manifest.PURLs(deps))
 	if len(purls) == 0 {
 		slog.Debug("no auditable dependencies found", "filename", filename)
 		publishDiagnostics(ctx, uri, nil)

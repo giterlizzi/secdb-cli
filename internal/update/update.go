@@ -117,17 +117,16 @@ func fetchLatest() (*ReleaseInfo, error) {
 	return &release, nil
 }
 
+// updateCheckInterval is how long a cached release check stays fresh.
+const updateCheckInterval = 24 * time.Hour
+
 // IsAvailable reports whether a newer release exists, using the cached
-// state to skip the network when it is fresh.
+// state to skip the network when it is fresh, or when it already knows of a
+// newer release.
 func IsAvailable(currentVersion string) (bool, *ReleaseInfo, error) {
-
-	const updateCheckInterval = 24 * time.Hour
-
 	state := loadState()
 
-	existsUpdate := state.LatestVersion != "" && semver.IsValid(state.LatestVersion) && semver.Compare(state.LatestVersion, currentVersion) > 0
-
-	if time.Since(state.LastChecked) > updateCheckInterval && !existsUpdate {
+	if time.Since(state.LastChecked) > updateCheckInterval && !isNewer(state.LatestVersion, currentVersion) {
 		release, err := fetchLatest()
 		if err != nil {
 			return false, nil, err
@@ -140,13 +139,19 @@ func IsAvailable(currentVersion string) (bool, *ReleaseInfo, error) {
 		_ = state.save()
 	}
 
-	if semver.IsValid(state.LatestVersion) && semver.Compare(state.LatestVersion, currentVersion) > 0 {
-		return true, &ReleaseInfo{
-			Version:     state.LatestVersion,
-			URL:         state.LatestURL,
-			PublishedAt: state.LatestPublishedAt,
-		}, nil
+	if !isNewer(state.LatestVersion, currentVersion) {
+		return false, nil, nil
 	}
+	return true, &ReleaseInfo{
+		Version:     state.LatestVersion,
+		URL:         state.LatestURL,
+		PublishedAt: state.LatestPublishedAt,
+	}, nil
+}
 
-	return false, nil, nil
+// isNewer reports whether version is a valid semver ("v1.2.3") newer than
+// current. An empty or malformed version (e.g. no release cached yet) is never
+// newer.
+func isNewer(version, current string) bool {
+	return semver.IsValid(version) && semver.Compare(version, current) > 0
 }

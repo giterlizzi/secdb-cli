@@ -13,15 +13,18 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	linuxHost         string
-	linuxPort         string
-	linuxUser         string
-	linuxIdentityFile string
-	linuxConfigFile   string
-	linuxSudo         bool
-	linuxOpts         auditOptions
-)
+// linuxOptions are the flags of "audit linux".
+type linuxOptions struct {
+	host         string
+	port         string
+	user         string
+	identityFile string
+	sshConfig    string
+	sudo         bool
+	audit        auditOptions
+}
+
+var linuxOpts linuxOptions
 
 var linuxAuditCmd = &cobra.Command{
 	Use:   "linux [ssh://user@host:port]",
@@ -57,63 +60,73 @@ var linuxAuditCmd = &cobra.Command{
 			secdb audit linux --fail-on=high
 	`),
 	RunE: func(cmd *cobra.Command, args []string) error {
-
-		if len(args) > 0 {
-			uri := args[0]
-
-			if !strings.Contains(uri, "://") {
-				uri = "ssh://" + uri
-			}
-
-			u, err := url.Parse(uri)
-			if err != nil {
-				return fmt.Errorf("invalid SSH URI %q: %w", uri, err)
-			}
-
-			if u.Scheme != "ssh" {
-				return fmt.Errorf("unknown scheme %q", u.Scheme)
-			}
-
-			if u.Hostname() != "" {
-				linuxHost = u.Hostname()
-
-				if u.Port() != "" {
-					linuxPort = u.Port()
-				}
-
-				if u.User.Username() != "" {
-					linuxUser = u.User.Username()
-				}
-			}
+		target, err := linuxOpts.target(args)
+		if err != nil {
+			return err
 		}
-
-		target := inventory.Target{
-			Host:         linuxHost,
-			Port:         linuxPort,
-			User:         linuxUser,
-			IdentityFile: linuxIdentityFile,
-			ConfigFile:   linuxConfigFile,
-			Sudo:         linuxSudo,
-		}
-		return runPackageAudit(target, &linuxOpts)
+		return runPackageAudit(target, &linuxOpts.audit)
 	},
 }
 
 func init() {
 	auditCmd.AddCommand(linuxAuditCmd)
+	linuxOpts.addFlags(linuxAuditCmd)
+}
 
-	linuxAuditCmd.Flags().StringVar(&linuxHost, "host", "",
+func (o *linuxOptions) addFlags(cmd *cobra.Command) {
+	cmd.Flags().StringVar(&o.host, "host", "",
 		"Audit a remote host over SSH (default: local machine)")
-	linuxAuditCmd.Flags().StringVar(&linuxPort, "port", "",
+	cmd.Flags().StringVar(&o.port, "port", "",
 		"SSH port (default 22)")
-	linuxAuditCmd.Flags().StringVar(&linuxUser, "user", "",
+	cmd.Flags().StringVar(&o.user, "user", "",
 		"SSH user")
-	linuxAuditCmd.Flags().StringVar(&linuxIdentityFile, "identity-file", "",
+	cmd.Flags().StringVar(&o.identityFile, "identity-file", "",
 		"SSH identity (private key) file")
-	linuxAuditCmd.Flags().StringVar(&linuxConfigFile, "ssh-config", "",
+	cmd.Flags().StringVar(&o.sshConfig, "ssh-config", "",
 		"SSH config file (when set, host-key policy is left to it)")
-	linuxAuditCmd.Flags().BoolVar(&linuxSudo, "sudo", false,
+	cmd.Flags().BoolVar(&o.sudo, "sudo", false,
 		"Prefix package-list commands with 'sudo -n'")
 
-	linuxOpts.addFlags(linuxAuditCmd)
+	o.audit.addFlags(cmd)
+}
+
+// target returns the system to audit: the local machine, or the SSH host of
+// the flags. An ssh://user@host:port argument overrides --host/--user/--port.
+// With --debug (or SECDB_DEBUG: global.debug, set by setupLogging) ssh runs
+// with -vvv, and its connection log goes to the debug output.
+func (o *linuxOptions) target(args []string) (inventory.Target, error) {
+	t := inventory.Target{
+		Host:         o.host,
+		Port:         o.port,
+		User:         o.user,
+		IdentityFile: o.identityFile,
+		ConfigFile:   o.sshConfig,
+		Sudo:         o.sudo,
+		Verbose:      global.debug,
+	}
+	if len(args) == 0 {
+		return t, nil
+	}
+
+	uri := args[0]
+	if !strings.Contains(uri, "://") {
+		uri = "ssh://" + uri
+	}
+	u, err := url.Parse(uri)
+	if err != nil {
+		return t, fmt.Errorf("invalid SSH URI %q: %w", uri, err)
+	}
+	if u.Scheme != "ssh" {
+		return t, fmt.Errorf("unknown scheme %q", u.Scheme)
+	}
+	if u.Hostname() != "" {
+		t.Host = u.Hostname()
+		if u.Port() != "" {
+			t.Port = u.Port()
+		}
+		if u.User.Username() != "" {
+			t.User = u.User.Username()
+		}
+	}
+	return t, nil
 }

@@ -14,6 +14,9 @@ func TestLinks(t *testing.T) {
 		{"cwe", CWE("https://secdb.example.com", "CWE-79"), "https://secdb.example.com/cwe/detail/CWE-79"},
 		{"advisory", Advisory("https://secdb.example.com", "GHSA-jfh8-c2jp-5v3q"), "https://secdb.example.com/security-advisory/detail/GHSA-jfh8-c2jp-5v3q"},
 		{"path prefix and trailing slash", CVE("https://gateway.example.com/secdb/", "CVE-2021-44228"), "https://gateway.example.com/secdb/cve/detail/CVE-2021-44228"},
+		{"path", Path("https://secdb.example.com", "/security-advisory/detail/MAVEN:GHSA-H383-GMXW-35V2"), "https://secdb.example.com/security-advisory/detail/MAVEN:GHSA-H383-GMXW-35V2"},
+		{"path with prefix", Path("https://gateway.example.com/secdb", "/cve/detail/CVE-2021-44228"), "https://gateway.example.com/secdb/cve/detail/CVE-2021-44228"},
+		{"empty path", Path("https://secdb.example.com", ""), ""},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {

@@ -96,7 +96,7 @@ func ReleaseNotes(changelog string) []ChangelogRelease {
 func ReleaseNotesAfterVersion(releases []ChangelogRelease, version string) []ChangelogRelease {
 	var entries []ChangelogRelease
 	for _, r := range releases {
-		if semver.Compare(r.Version, version) > 0 {
+		if isNewer(r.Version, version) {
 			entries = append(entries, r)
 		}
 	}

@@ -12,9 +12,12 @@ import (
 	packageurl "github.com/package-url/packageurl-go"
 )
 
-// ValidatePURLs returns only the well-formed PURLs, dropping the invalid ones.
-func ValidatePURLs(purls []string) []string {
+// NormalizePURLs returns the PURLs to audit: the well-formed ones in canonical
+// form (invalid ones are dropped, with a debug log), without duplicates, in
+// first-seen order.
+func NormalizePURLs(purls []string) []string {
 	valid := []string{}
+	seen := make(map[string]bool, len(purls))
 
 	for _, p := range purls {
 		purl, err := packageurl.FromString(p)
@@ -23,6 +26,10 @@ func ValidatePURLs(purls []string) []string {
 			continue
 		}
 		s := purl.ToString()
+		if seen[s] {
+			continue
+		}
+		seen[s] = true
 		slog.Debug("found PURL", "purl", s)
 		valid = append(valid, s)
 	}

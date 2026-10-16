@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-16
+
+### Added
+
+- `secdb search`: full-text search across ZEN SecDB (CVEs, CWEs, advisories,
+  NASL plugins, ExploitDB entries), narrowed by record type (`--type`, a
+  comma-separated list) and last-modified window (`--since 30d`), paged with
+  `--page`/`--per-page`. The `text` output links each result to the web GUI and
+  ends with the totals by type and severity; `json`/`yaml`/`template` print the
+  results with their API field names, the counts by type, severity and source,
+  and a `pagination` object.
+- Template function `path_url`, the web-GUI link for a path returned by the API
+  (such as a search hit's `web_url`).
+- `--jq <expression>`: filter the JSON output of any command with a jq
+  expression, without installing `jq` (e.g. `secdb search log4shell --jq
+  '.hits[].id'`). It implies `--output=json`; strings are printed without
+  quotes, one result per line, and an invalid expression fails before the API
+  call.
+
+### Changed
+
+- The SARIF report of `audit linux` and `audit docker` has its own automation
+  ID, `secdb-cli/audit-linux` (it was `secdb-cli/audit-purl`, as for the
+  PURL-based audits): GitHub Code Scanning shows their alerts in a separate
+  category.
+- `audit linux` over SSH runs `ssh -vvv` with `--debug` (or `SECDB_DEBUG`), so
+  the connection log shows up in the debug output.
+- `--debug` (or `SECDB_DEBUG`) logs the effective configuration: the global
+  options (whether an API key is set, never the key itself), the audit options
+  and the audited target.
+
+### Fixed
+
+- `-o yaml`, `-o template` and `-o html` use the API field names, as `-o json`
+  shows them, for every command: before, `audit` and `ssvc calculate` exposed
+  the Go names to templates (`{{.PURL}}` instead of `{{.purl}}`) and lowercased
+  them in YAML (`basescore` instead of `base_score`).
+- The `text` output drops the control characters found in the data (titles and
+  descriptions come from third-party feeds), so an escape sequence in a record
+  can no longer reach the terminal.
+- The template functions `abbrev` and `trunc` count characters, not bytes, so
+  they no longer cut a multi-byte character in two.
+- Notifications count the findings with no severity as `unknown`: the webhook
+  `counts` had an empty `""` key for them, and Slack and Teams left them out,
+  so their counts didn't add up to the number of findings in the title.
+
+### Security
+
+- Built with Go 1.26.9 and `golang.org/x/net` v0.60.0, which fix
+  vulnerabilities in `net/http`, HTTP/2, `crypto/tls` and `html/template`.
+
 ## [0.6.0] - 2026-10-07
 
 ### Added
@@ -297,7 +348,8 @@ Initial public release of the ZEN SecDB CLI.
   and custom `template`/`html` via Go templates.
 - Automatic background update check and a `version` command.
 
-[Unreleased]: https://github.com/giterlizzi/secdb-cli/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/giterlizzi/secdb-cli/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/giterlizzi/secdb-cli/compare/v0.3.1...v0.4.0
