@@ -13,7 +13,7 @@ import (
 // Target describes where commands are executed. The zero value (no Host, Image
 // or Container) runs commands on the local machine.
 type Target struct {
-	Host         string // remote host; empty, "localhost" or "127.0.0.1" means local
+	Host         string // SSH host, loopback included; empty means local
 	Port         string // SSH port (default 22)
 	User         string // SSH user
 	IdentityFile string // SSH identity (private key) file
@@ -54,7 +54,7 @@ func (t Target) isLocal() bool {
 
 // isRemote reports whether the target is a remote host reached over SSH.
 func (t Target) isRemote() bool {
-	return t.Host != "" && t.Host != "localhost" && t.Host != "127.0.0.1"
+	return t.Host != ""
 }
 
 // isDocker reports whether commands run in a Docker image or container.

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `audit linux` with `--host localhost` or `--host 127.0.0.1` (or an
+  `ssh://user@127.0.0.1:2222` URI) audited the local machine, ignoring the SSH
+  user and port. An explicit host now always means SSH, loopback included (VMs
+  and containers reached through a forwarded port); without a host the audit
+  stays local.
+
 ## [0.7.0] - 2026-10-16
 
 ### Added
