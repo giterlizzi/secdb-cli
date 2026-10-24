@@ -14,6 +14,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   user and port. An explicit host now always means SSH, loopback included (VMs
   and containers reached through a forwarded port); without a host the audit
   stays local.
+- `secdb lsp` on Windows: the workspace discovery failed (only in the debug
+  log) and the `.secdbignore` was never found, so ignored advisories stayed
+  warnings. File URIs (`file:///C:/...`) are now turned into Windows paths,
+  and every document URI is normalized (`file:///c%3A/...` and
+  `file:///C:/...` are the same file), so a file is never audited or reported
+  under two URIs.
 
 ## [0.7.0] - 2026-10-16
 

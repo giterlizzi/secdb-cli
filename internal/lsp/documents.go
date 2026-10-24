@@ -14,7 +14,7 @@ import (
 const delay = 400 * time.Millisecond
 
 func (s *Server) didOpen(ctx *glsp.Context, params *protocol.DidOpenTextDocumentParams) error {
-	uri := params.TextDocument.URI
+	uri := normalizeURI(params.TextDocument.URI)
 	slog.Debug("didOpen", "uri", uri)
 
 	s.markOpen(uri)
@@ -35,7 +35,7 @@ func (s *Server) didChange(ctx *glsp.Context, params *protocol.DidChangeTextDocu
 		return nil
 	}
 
-	uri := params.TextDocument.URI
+	uri := normalizeURI(params.TextDocument.URI)
 
 	s.delayAuditManifest(ctx, uri, []byte(change.Text))
 	slog.Debug("didChange", "uri", uri)
@@ -44,7 +44,7 @@ func (s *Server) didChange(ctx *glsp.Context, params *protocol.DidChangeTextDocu
 }
 
 func (s *Server) didClose(ctx *glsp.Context, params *protocol.DidCloseTextDocumentParams) error {
-	uri := params.TextDocument.URI
+	uri := normalizeURI(params.TextDocument.URI)
 	slog.Debug("didClose", "uri", uri)
 
 	s.forget(uri)

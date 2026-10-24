@@ -6,6 +6,8 @@ package lsp
 import (
 	"log/slog"
 	"net/url"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -182,6 +184,33 @@ func (s *Server) shutdown(ctx *glsp.Context) error {
 	return nil
 }
 
+// normalizeURI gives every incoming document URI one canonical form, the one
+// filenameToURI builds, so the open set, the timers and the diagnostics never
+// see a file under two URIs. Clients spell the same file differently (VS Code
+// sends file:///c%3A/x, Zed file:///C:/x) and the LSP spec asks the server to
+// stay consistent with its own form: the path is unescaped and re-encoded and,
+// on Windows, the drive letter is uppercased. A URI that isn't a valid file URI
+// is returned as is.
+func normalizeURI(uri protocol.DocumentUri) protocol.DocumentUri {
+	u, err := url.Parse(uri)
+	if err != nil || u.Scheme != "file" {
+		return uri
+	}
+
+	host, path := u.Host, u.Path
+	if host == "localhost" {
+		host = ""
+	}
+	if runtime.GOOS == "windows" {
+		path = upperDrive(path)
+	}
+
+	return (&url.URL{Scheme: "file", Host: host, Path: path}).String()
+}
+
+// uriToFilename turns a file URI into a path of this OS. On Windows the URI
+// path of file:///C:/x is "/C:/x", which the file API rejects ("syntax is
+// incorrect"), so the leading slash goes; file://server/share is a UNC path.
 func uriToFilename(uri protocol.DocumentUri) (string, error) {
 	u, err := url.Parse(uri)
 
@@ -189,9 +218,55 @@ func uriToFilename(uri protocol.DocumentUri) (string, error) {
 		return "", err
 	}
 
-	return u.Path, nil
+	path := u.Path
+	if runtime.GOOS == "windows" {
+		path = windowsPath(u.Host, path)
+	}
+
+	return filepath.FromSlash(path), nil
 }
 
+// windowsPath maps the host and path of a file URI to a Windows path, still
+// with forward slashes: "/C:/x" becomes "C:/x", host "server" "//server/...".
+func windowsPath(host, path string) string {
+	if host != "" && host != "localhost" {
+		return "//" + host + path
+	}
+	if isDriveURIPath(path) {
+		return path[1:]
+	}
+	return path
+}
+
+// isDriveURIPath reports whether a URI path starts with a Windows drive
+// ("/C:"), which url.Parse leaves in the path.
+func isDriveURIPath(path string) bool {
+	return len(path) >= 3 && path[0] == '/' && isDriveLetter(path[1]) && path[2] == ':'
+}
+
+func isDriveLetter(c byte) bool {
+	return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
+}
+
+// upperDrive uppercases the drive letter of a URI path ("/c:/x" becomes
+// "/C:/x"): drive letters are case-insensitive, so one case keeps one URI.
+func upperDrive(path string) string {
+	if isDriveURIPath(path) {
+		return path[:1] + strings.ToUpper(path[1:2]) + path[2:]
+	}
+	return path
+}
+
+// filenameToURI turns a path of this OS into a file URI, in the form
+// normalizeURI gives: on Windows c:\x becomes file:///C:/x (a no-op on Unix,
+// whose paths already start with /).
 func filenameToURI(path string) protocol.DocumentUri {
+	path = filepath.ToSlash(path)
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	if runtime.GOOS == "windows" {
+		path = upperDrive(path)
+	}
 	return (&url.URL{Scheme: "file", Path: path}).String()
 }
