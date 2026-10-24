@@ -1,6 +1,6 @@
 # Editor integration (Language Server)
 
-`secdb lsp` is a [Language Server](https://microsoft.github.io/language-server-protocol/): it audits the dependency manifests you open in the editor and shows the vulnerabilities as diagnostics on the dependency lines, each linking to its ZEN SecDB advisory. It uses the same parsers as [`audit manifest`](audit.md#audit-a-dependency-manifest), so it reads the same files (`go.mod`, `package-lock.json`, `yarn.lock`, `requirements*.txt`, `Gemfile.lock`, `pom.xml`, `gradle.lockfile`, `composer.lock`), and the same `SECDB_API_KEY`, `--base-url` and `--web-url`.
+`secdb lsp` is a [Language Server](https://microsoft.github.io/language-server-protocol/): it audits the dependency manifests you open in the editor and shows the vulnerabilities as diagnostics on the dependency lines, each linking to its ZEN SecDB advisory. It uses the same parsers as [`audit manifest`](audit.md#audit-a-dependency-manifest), so it reads the same files (`go.mod`, `package-lock.json`, `yarn.lock`, `requirements*.txt`, `Gemfile.lock`, `pom.xml`, `gradle.lockfile`, `Cargo.lock`, `composer.lock`), and the same `SECDB_API_KEY`, `--base-url` and `--web-url`.
 
 The editor starts the server and talks to it over stdin/stdout; run by hand in a terminal it just waits for input. While you type, the audit waits until you stop for a moment. `SECDB_DEBUG=1` or `--debug` writes a log to stderr.
 
@@ -41,8 +41,8 @@ When a newer `secdb` release is available, the server says so once, with a **Rel
     "secdb": {
       "command": ["secdb", "lsp"],
       "commandDebug": ["secdb", "lsp", "--debug"],
-      "rootIndicationFileNames": ["go.mod", "package-lock.json", "yarn.lock", "requirements.txt", "Gemfile.lock", "pom.xml", "gradle.lockfile", "composer.lock"],
-      "highlightingModeRegex": "^(Go|JSON|Python|Ruby|XML)$",
+      "rootIndicationFileNames": ["go.mod", "package-lock.json", "yarn.lock", "requirements.txt", "Gemfile.lock", "pom.xml", "gradle.lockfile", "Cargo.lock", "composer.lock"],
+      "highlightingModeRegex": "^(Go|JSON|Python|Ruby|TOML|XML)$",
       "settings": { "secdb": { "showUnfixed": true } }
     }
   }
@@ -76,7 +76,7 @@ vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
   pattern = {
     "go.mod", "package-lock.json", "yarn.lock",
     "requirements*.txt", "Gemfile.lock", "pom.xml",
-    "gradle.lockfile", "composer.lock",
+    "gradle.lockfile", "Cargo.lock", "composer.lock",
   },
   callback = function(args)
     vim.lsp.start({
@@ -110,4 +110,4 @@ Settings go in Zed's `settings.json`:
 ```
 </details>
 
-Not every editor gives these files a language of their own, and the editor needs one to decide when to start the server: Sublime treats `go.mod` as `text.xml.dtd` (hence that entry in the selector above), and `requirements.txt`, `Gemfile.lock`, `yarn.lock` and `gradle.lockfile` as plain text. The server itself recognizes the files by name.
+Not every editor gives these files a language of their own, and the editor needs one to decide when to start the server: Sublime treats `go.mod` as `text.xml.dtd` (hence that entry in the selector above), and `requirements.txt`, `Gemfile.lock`, `yarn.lock`, `gradle.lockfile` and `Cargo.lock` (without a TOML package) as plain text. The server itself recognizes the files by name.

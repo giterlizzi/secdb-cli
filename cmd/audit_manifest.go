@@ -45,6 +45,9 @@ var manifestAuditCmd = &cobra.Command{
 			secdb audit manifest --file pom.xml
 			secdb audit manifest --file gradle.lockfile
 
+		Rust:
+			secdb audit manifest --file Cargo.lock
+
 		Discover and audit every manifest under a directory (recursively):
 			secdb audit manifest --directory .
 			secdb audit manifest --directory ./services --max-depth 3
@@ -73,6 +76,7 @@ var manifestAuditCmd = &cobra.Command{
 		  - Gemfile.lock                                (Ruby)
 		  - pom.xml                                     (Maven)
 		  - gradle.lockfile                             (Gradle)
+		  - Cargo.lock                                  (Rust / Cargo)
 		  - composer.lock                               (PHP / Composer)
 
 		Results are shaped and rendered exactly like "audit purl": --view,

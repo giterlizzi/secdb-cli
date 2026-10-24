@@ -12,6 +12,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `audit manifest` and `secdb lsp` read `gradle.lockfile` (Gradle dependency
   locking): every resolved dependency, transitive and test ones included, with
   its line for the editor diagnostics and SARIF.
+- `audit manifest` and `secdb lsp` read `Cargo.lock` (Rust): every crate from
+  a registry, with the lines of its `[[package]]` entry for the editor
+  diagnostics and SARIF; workspace members and git or path crates are skipped.
 
 ### Changed
 

@@ -90,6 +90,7 @@ var DefaultSkipDirs = map[string]bool{
 }
 
 var parsers = []Parser{
+	cargoParser{},
 	composerParser{},
 	goModParser{},
 	gradleParser{},
