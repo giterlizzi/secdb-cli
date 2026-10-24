@@ -36,13 +36,14 @@ var manifestAuditCmd = &cobra.Command{
 			secdb audit manifest --file package-lock.json
 			secdb audit manifest --file yarn.lock
 
-		Python / Ruby:
+		Python / Ruby / PHP:
 			secdb audit manifest --file requirements.txt
 			secdb audit manifest --file Gemfile.lock
-
-		Java / PHP:
-			secdb audit manifest --file pom.xml
 			secdb audit manifest --file composer.lock
+
+		Java:
+			secdb audit manifest --file pom.xml
+			secdb audit manifest --file gradle.lockfile
 
 		Discover and audit every manifest under a directory (recursively):
 			secdb audit manifest --directory .
@@ -71,6 +72,7 @@ var manifestAuditCmd = &cobra.Command{
 		  - requirements*.txt                           (Python)
 		  - Gemfile.lock                                (Ruby)
 		  - pom.xml                                     (Maven)
+		  - gradle.lockfile                             (Gradle)
 		  - composer.lock                               (PHP / Composer)
 
 		Results are shaped and rendered exactly like "audit purl": --view,

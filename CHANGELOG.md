@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `audit manifest` and `secdb lsp` read `gradle.lockfile` (Gradle dependency
+  locking): every resolved dependency, transitive and test ones included, with
+  its line for the editor diagnostics and SARIF.
+
 ### Changed
 
 - `secdb lsp`: the diagnostics of a `pom.xml` are now on the `<dependency>`

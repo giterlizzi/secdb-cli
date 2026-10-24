@@ -33,6 +33,7 @@ var lspCmd = &cobra.Command{
 		  - requirements*.txt                           (Python)
 		  - Gemfile.lock                                (Ruby)
 		  - pom.xml                                     (Maven)
+		  - gradle.lockfile                             (Gradle)
 		  - composer.lock                               (PHP / Composer)
 
 		On startup the server also discovers and audits every supported manifest
@@ -77,7 +78,7 @@ var lspCmd = &cobra.Command{
 		      "secdb": {
 		        "command": ["secdb", "lsp"],
 		        "commandDebug": ["secdb", "lsp", "--debug"],
-		        "rootIndicationFileNames": ["go.mod", "package-lock.json", "yarn.lock", "requirements.txt", "Gemfile.lock", "pom.xml", "composer.lock"],
+		        "rootIndicationFileNames": ["go.mod", "package-lock.json", "yarn.lock", "requirements.txt", "Gemfile.lock", "pom.xml", "gradle.lockfile", "composer.lock"],
 		        "highlightingModeRegex": "^(Go|JSON|Python|Ruby|XML)$",
 		        "settings": { "secdb": { "showUnfixed": true } }
 		      }
@@ -101,7 +102,7 @@ var lspCmd = &cobra.Command{
 		  vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
 		    pattern = { "go.mod", "package-lock.json", "yarn.lock",
 		                "requirements*.txt", "Gemfile.lock", "pom.xml",
-		                "composer.lock" },
+		                "gradle.lockfile", "composer.lock" },
 		    callback = function(args)
 		      vim.lsp.start({
 		        name = "secdb",

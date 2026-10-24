@@ -92,6 +92,7 @@ var DefaultSkipDirs = map[string]bool{
 var parsers = []Parser{
 	composerParser{},
 	goModParser{},
+	gradleParser{},
 	mavenParser{},
 	npmParser{},
 	pythonParser{},
