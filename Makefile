@@ -1,5 +1,6 @@
 MODULE      := github.com/giterlizzi/secdb-cli
 BIN_DIR     := bin
+BIN_NAME    := secdb$(shell go env GOEXE)
 DIST_DIR    := dist
 CGO_ENABLED := 0
 PREFIX      ?= $(HOME)/.local
@@ -11,7 +12,7 @@ BRANCH      := $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unkno
 BUILD_DATE  := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 
 ALLOWED_LICENSES := MIT,Apache-2.0,BSD-2-Clause,BSD-3-Clause,ISC,Unlicense
- 
+
 LDFLAGS := -X '$(MODULE)/internal/meta.Version=$(VERSION)' \
            -X '$(MODULE)/internal/meta.CommitHash=$(COMMIT_HASH)' \
            -X '$(MODULE)/internal/meta.Branch=$(BRANCH)' \
@@ -26,18 +27,16 @@ LDFLAGS := -X '$(MODULE)/internal/meta.Version=$(VERSION)' \
 all: test build ## Run tests and build the binary
 
 build: ## Build the secdb binary into bin/
-	@mkdir -p $(BIN_DIR)
 	@echo "==> building secdb ($(VERSION), $(COMMIT_HASH))"
-	CGO_ENABLED=$(CGO_ENABLED) go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/secdb .
+	CGO_ENABLED=$(CGO_ENABLED) go build -ldflags "$(LDFLAGS)" -o $(BIN_DIR)/$(BIN_NAME) .
 
 install: build ## Install the secdb binary into $(PREFIX)/bin (default ~/.local/bin)
 	install -d $(DESTDIR)$(PREFIX)/bin
-	install -m 0755 $(BIN_DIR)/secdb $(DESTDIR)$(PREFIX)/bin/secdb
+	install -m 0755 $(BIN_DIR)/$(BIN_NAME) $(DESTDIR)$(PREFIX)/bin/$(BIN_NAME)
 
 release: test ## Run tests, then build a release binary (go build -a)
-	@mkdir -p $(BIN_DIR)
 	@echo "==> building secdb release ($(VERSION), $(COMMIT_HASH))"
-	CGO_ENABLED=$(CGO_ENABLED) go build -a -ldflags "$(LDFLAGS) -s -w" -o $(BIN_DIR)/secdb .
+	CGO_ENABLED=$(CGO_ENABLED) go build -a -ldflags "$(LDFLAGS) -s -w" -o $(BIN_DIR)/$(BIN_NAME) .
 
 vet: ## Run go vet over the whole module
 	go vet ./...
