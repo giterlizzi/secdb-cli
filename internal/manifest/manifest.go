@@ -198,6 +198,13 @@ func splitLines(content []byte) []string {
 	return lines
 }
 
+// lineRange spans a single whole line (1-based).
 func lineRange(line int) Range {
-	return Range{Start: Position{Line: line, Column: 1}, End: Position{Line: line, Column: 1}}
+	return linesRange(line, line)
+}
+
+// linesRange spans whole lines, from start to end (1-based, inclusive): Column
+// is 1 on both ends, so End means "through line end", not "up to its start".
+func linesRange(start, end int) Range {
+	return Range{Start: Position{Line: start, Column: 1}, End: Position{Line: end, Column: 1}}
 }

@@ -37,11 +37,32 @@ type pomDependency struct {
 	Version    string `xml:"version"`
 	Scope      string `xml:"scope"`
 	Optional   string `xml:"optional"`
+	StartLine  int    `xml:"-"`
+	EndLine    int    `xml:"-"`
 }
 
 type pomProperty struct {
 	XMLName xml.Name
 	Value   string `xml:",chardata"`
+}
+
+// UnmarshalXML decodes a <dependency> as usual and records the lines it spans.
+// The decoder is the one xml.Unmarshal is reading the whole pom.xml with, so
+// InputPos is right after the start tag before DecodeElement and, once
+// DecodeElement has consumed the element, right after </dependency>.
+func (d *pomDependency) UnmarshalXML(dec *xml.Decoder, start xml.StartElement) error {
+	startLine, _ := dec.InputPos()
+
+	type plain pomDependency // same fields, no UnmarshalXML: no recursion
+	if err := dec.DecodeElement((*plain)(d), &start); err != nil {
+		return err
+	}
+
+	endLine, _ := dec.InputPos()
+
+	d.StartLine = startLine
+	d.EndLine = endLine
+	return nil
 }
 
 // mavenParser handles pom.xml.
@@ -85,6 +106,7 @@ func (mavenParser) Parse(filename string, content []byte) ([]Dependency, error) 
 			Ecosystem: "maven",
 			Name:      d.GroupID + ":" + d.ArtifactID,
 			Version:   version,
+			Range:     linesRange(d.StartLine, d.EndLine),
 			Direct:    true,
 		})
 	}

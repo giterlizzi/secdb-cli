@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `secdb lsp`: the diagnostics of a `pom.xml` are now on the `<dependency>`
+  element they refer to, instead of all on the first line.
+
 ### Fixed
 
 - `audit linux` with `--host localhost` or `--host 127.0.0.1` (or an

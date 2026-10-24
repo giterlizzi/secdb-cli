@@ -83,10 +83,16 @@ func diagnosticFor(d manifest.Dependency, adv client.Advisory, webURL string, ig
 }
 
 func toRange(r manifest.Range) protocol.Range {
-	line := fixLine(r.Start.Line)
+	startLine := fixLine(r.Start.Line)
+	endLine := fixLine(r.End.Line)
+
+	if endLine < startLine {
+		endLine = startLine
+	}
+
 	return protocol.Range{
-		Start: protocol.Position{Line: line, Character: 0},
-		End:   protocol.Position{Line: line, Character: 1024},
+		Start: protocol.Position{Line: startLine, Character: 0},
+		End:   protocol.Position{Line: endLine, Character: 1024},
 	}
 }
 
