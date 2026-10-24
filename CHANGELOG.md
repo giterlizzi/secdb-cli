@@ -9,12 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- `audit manifest` and `secdb lsp` read `gradle.lockfile` (Gradle dependency
-  locking): every resolved dependency, transitive and test ones included, with
-  its line for the editor diagnostics and SARIF.
-- `audit manifest` and `secdb lsp` read `Cargo.lock` (Rust): every crate from
-  a registry, with the lines of its `[[package]]` entry for the editor
-  diagnostics and SARIF; workspace members and git or path crates are skipped.
+- `audit manifest` and `secdb lsp` read five more lockfiles: `gradle.lockfile`
+  (Gradle dependency locking), `Cargo.lock` (Rust), `poetry.lock`, `uv.lock`
+  and `pdm.lock` (Python). Every resolved dependency is audited, transitive, test and dev
+  ones included, with its lines for the editor diagnostics and SARIF; your own
+  workspace packages and the ones from git, a local path or a URL are skipped.
 
 ### Changed
 

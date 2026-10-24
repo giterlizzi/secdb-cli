@@ -36,17 +36,20 @@ var manifestAuditCmd = &cobra.Command{
 			secdb audit manifest --file package-lock.json
 			secdb audit manifest --file yarn.lock
 
-		Python / Ruby / PHP:
+		Python:
 			secdb audit manifest --file requirements.txt
+			secdb audit manifest --file poetry.lock
+			secdb audit manifest --file uv.lock
+			secdb audit manifest --file pdm.lock
+
+		Ruby / PHP / Rust:
 			secdb audit manifest --file Gemfile.lock
 			secdb audit manifest --file composer.lock
+			secdb audit manifest --file Cargo.lock
 
 		Java:
 			secdb audit manifest --file pom.xml
 			secdb audit manifest --file gradle.lockfile
-
-		Rust:
-			secdb audit manifest --file Cargo.lock
 
 		Discover and audit every manifest under a directory (recursively):
 			secdb audit manifest --directory .
@@ -73,6 +76,7 @@ var manifestAuditCmd = &cobra.Command{
 		  - go.mod                                      (Go modules)
 		  - package-lock.json, yarn.lock                (npm)
 		  - requirements*.txt                           (Python)
+		  - poetry.lock, uv.lock, pdm.lock              (Python)
 		  - Gemfile.lock                                (Ruby)
 		  - pom.xml                                     (Maven)
 		  - gradle.lockfile                             (Gradle)

@@ -96,8 +96,11 @@ var parsers = []Parser{
 	gradleParser{},
 	mavenParser{},
 	npmParser{},
+	pdmParser{},
+	poetryParser{},
 	pythonParser{},
 	rubyParser{},
+	uvParser{},
 }
 
 // ParserFor returns the parser that handles path (matched by base name), or nil

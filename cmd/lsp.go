@@ -31,6 +31,7 @@ var lspCmd = &cobra.Command{
 		  - go.mod                                      (Go modules)
 		  - package-lock.json, yarn.lock                (npm)
 		  - requirements*.txt                           (Python)
+		  - poetry.lock, uv.lock, pdm.lock              (Python)
 		  - Gemfile.lock                                (Ruby)
 		  - pom.xml                                     (Maven)
 		  - gradle.lockfile                             (Gradle)
@@ -79,7 +80,7 @@ var lspCmd = &cobra.Command{
 		      "secdb": {
 		        "command": ["secdb", "lsp"],
 		        "commandDebug": ["secdb", "lsp", "--debug"],
-		        "rootIndicationFileNames": ["go.mod", "package-lock.json", "yarn.lock", "requirements.txt", "Gemfile.lock", "pom.xml", "gradle.lockfile", "Cargo.lock", "composer.lock"],
+		        "rootIndicationFileNames": ["go.mod", "package-lock.json", "yarn.lock", "requirements.txt", "poetry.lock", "uv.lock", "pdm.lock", "Gemfile.lock", "pom.xml", "gradle.lockfile", "Cargo.lock", "composer.lock"],
 		        "highlightingModeRegex": "^(Go|JSON|Python|Ruby|TOML|XML)$",
 		        "settings": { "secdb": { "showUnfixed": true } }
 		      }
@@ -102,7 +103,8 @@ var lspCmd = &cobra.Command{
 
 		  vim.api.nvim_create_autocmd({ "BufReadPost", "BufNewFile" }, {
 		    pattern = { "go.mod", "package-lock.json", "yarn.lock",
-		                "requirements*.txt", "Gemfile.lock", "pom.xml",
+		                "requirements*.txt", "poetry.lock", "uv.lock", "pdm.lock",
+		                "Gemfile.lock", "pom.xml",
 		                "gradle.lockfile", "Cargo.lock", "composer.lock" },
 		    callback = function(args)
 		      vim.lsp.start({
