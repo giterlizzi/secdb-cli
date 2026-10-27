@@ -22,13 +22,19 @@ var (
 	tomlInlineTableRe = regexp.MustCompile(`^([A-Za-z0-9_-]+) = \{ ([A-Za-z0-9_-]+) = "([^"]*)"`)
 )
 
-// tomlPackages reads the [[package]] entries line by line, with no TOML
-// library: these files have a fixed layout, one `key = "value"` or
-// `key = { k = "value", ... }` per line. A [package.x] header opens a
-// sub-table of the entry; any other table header ([metadata],
-// [[patch.unused]], [manifest]) ends it. Multi-line arrays (files, wheels,
-// dependencies) are indented, so their lines never match a key.
-func tomlPackages(content []byte) []tomlPackage {
+// tomlPackages reads the [[name]] entries (name is "package" for Cargo.lock,
+// poetry.lock, uv.lock and pdm.lock, "packages" for pylock.toml) line by line,
+// with no TOML library: these files have a fixed layout, one `key = "value"`
+// or `key = { k = "value", ... }` per line. A [name.x] or [[name.x]] header
+// opens a sub-table of the entry (e.g. [package.source], [[packages.wheels]]);
+// any other table header ([metadata], [[patch.unused]], [manifest], [tool.x])
+// ends it. Multi-line arrays (files, wheels, dependencies) are indented, so
+// their lines never match a key.
+func tomlPackages(content []byte, name string) []tomlPackage {
+	header := "[[" + name + "]]"
+	tablePrefix := "[" + name + "."
+	tableArrayPrefix := "[[" + name + "."
+
 	var pkgs []tomlPackage
 
 	fields := map[string]string{}
@@ -43,12 +49,12 @@ func tomlPackages(content []byte) []tomlPackage {
 
 	for i, line := range splitLines(content) {
 		switch {
-		case line == "[[package]]":
+		case line == header:
 			flush()
 			start, end = i+1, i+1
 			continue
-		case strings.HasPrefix(line, "[package."):
-			table = strings.TrimSuffix(strings.TrimPrefix(line, "[package."), "]") + "."
+		case strings.HasPrefix(line, tablePrefix) || strings.HasPrefix(line, tableArrayPrefix):
+			table = strings.Trim(line, "[]")[len(name)+1:] + "."
 		case strings.HasPrefix(line, "["):
 			flush()
 			continue

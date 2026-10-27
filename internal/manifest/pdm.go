@@ -20,7 +20,7 @@ func (pdmParser) Patterns() []string { return []string{"pdm.lock"} }
 func (pdmParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	var deps []Dependency
 
-	for _, p := range tomlPackages(content) {
+	for _, p := range tomlPackages(content, "package") {
 		name, version := p.fields["name"], p.fields["version"]
 
 		if name == "" || version == "" || !isPDMIndex(p.fields) {

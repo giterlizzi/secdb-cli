@@ -6,19 +6,20 @@ import (
 	packageurl "github.com/package-url/packageurl-go"
 )
 
-// uvParser handles uv.lock: the packages with a `source = { registry = ... }`
+// uvParser handles uv.lock (and <script>.py.lock, the lock of a script with
+// inline metadata): the packages with a `source = { registry = ... }`
 // (PyPI or a private index). The project itself (editable, virtual) and the
 // git, path, directory and url sources are skipped. Direct is not computed
 // yet: the root package lists its dependencies in a multi-line array.
 type uvParser struct{}
 
 func (uvParser) Ecosystem() string  { return "python" }
-func (uvParser) Patterns() []string { return []string{"uv.lock"} }
+func (uvParser) Patterns() []string { return []string{"uv.lock", "*.py.lock"} }
 
 func (uvParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	var deps []Dependency
 
-	for _, p := range tomlPackages(content) {
+	for _, p := range tomlPackages(content, "package") {
 		name, version := p.fields["name"], p.fields["version"]
 
 		if name == "" || version == "" || p.fields["source.registry"] == "" {

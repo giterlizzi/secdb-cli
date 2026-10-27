@@ -54,8 +54,8 @@ secdb audit manifest --directory ./services --max-depth 3 --fail-on=high
 |---|---|
 | Go | `go.mod` |
 | npm | `package-lock.json`, `yarn.lock` |
-| Python | `requirements*.txt`, `poetry.lock`, `uv.lock`, `pdm.lock` |
-| Ruby | `Gemfile.lock` |
+| Python | `requirements*.txt`, `poetry.lock`, `uv.lock`, `pdm.lock`, `pylock.toml` |
+| Ruby | `Gemfile.lock`, `gems.locked` |
 | Java (Maven) | `pom.xml` |
 | Java (Gradle) | `gradle.lockfile` |
 | Rust (Cargo) | `Cargo.lock` |
@@ -63,13 +63,13 @@ secdb audit manifest --directory ./services --max-depth 3 --fail-on=high
 
 What gets audited:
 
-- npm, Ruby, Gradle, Cargo, Poetry, uv, PDM and Composer: the versions resolved in the lockfile, i.e. what is actually installed.
-- Ruby: only the gems from a gem server (the `GEM` sections of `Gemfile.lock`). Gems from a git repository or a local path (`GIT`, `PATH`) are skipped, since they may be a fork or an unrelated gem with the same name as a public one. A platform-specific gem (`nokogiri (1.15.4-x86_64-linux)`) is audited at its version (1.15.4).
+- npm, Ruby, Gradle, Cargo, Poetry, uv, PDM, `pylock.toml` and Composer: the versions resolved in the lockfile, i.e. what is actually installed.
+- Ruby: only the gems from a gem server (the `GEM` sections of `Gemfile.lock`, or `gems.locked` next to a `gems.rb`). Gems from a git repository or a local path (`GIT`, `PATH`) are skipped, since they may be a fork or an unrelated gem with the same name as a public one. A platform-specific gem (`nokogiri (1.15.4-x86_64-linux)`) is audited at its version (1.15.4).
 - Python (`requirements*.txt`): the version written in the requirement: the exact one (`==2.28.0`), otherwise the lower bound of `>=` or `~=` (`>=2.28` audits 2.28). A requirement with only `!=`, `<`, `<=`, `>`, a wildcard (`==2.*`) or no version is skipped.
 - Maven: a single `pom.xml`. `${...}` properties and the versions in `<dependencyManagement>` are resolved; parent POMs, imported BOMs and transitive dependencies are not, so a dependency whose version comes from them is skipped.
 - Gradle: the `gradle.lockfile` written by dependency locking (Gradle 6.4+; create or refresh it with `./gradlew dependencies --write-locks`), with every configuration, test ones included. The lock doesn't record which dependencies `build.gradle` declares, so none is marked as direct. The per-configuration lock files of older Gradle versions (`gradle/dependency-locks/*.lockfile`) and `buildscript-gradle.lockfile` (the build plugins) are not read.
 - Cargo: only the crates from a registry (crates.io or an alternative registry). The packages of your own workspace and the crates from a git repository or a local path are skipped, for the same reason as the Ruby ones. Every crate in the lockfile is audited, build and dev dependencies included; none is marked as direct yet.
-- Poetry, uv and PDM: only the packages from a package index (PyPI or a private one). Packages from a git repository, a local directory, a file or a URL are skipped, and so is your own project in `uv.lock`. Every dependency group is audited, dev included; none is marked as direct yet.
+- Poetry, uv, PDM and `pylock.toml` (the standard lockfile of PEP 751, also `pylock.<name>.toml`): only the packages from a package index (PyPI or a private one). Packages from a git repository, a local directory, a file, an archive or a URL are skipped, and so is your own project in `uv.lock`. Every dependency group is audited, dev included; none is marked as direct yet. The lock of a single script (`uv lock --script example.py`, written as `example.py.lock`) is read as a `uv.lock`.
 - Composer platform requirements (`php`, `ext-*`) are skipped.
 
 With `--directory`, the walk skips directories such as `.git`, `node_modules`, `vendor`, `target`, `dist`, `build` and `testdata`, and does not follow symlinks. A manifest that can't be parsed is skipped with a warning. All the dependencies found go into a single report.

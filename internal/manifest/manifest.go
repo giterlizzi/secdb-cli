@@ -98,6 +98,7 @@ var parsers = []Parser{
 	npmParser{},
 	pdmParser{},
 	poetryParser{},
+	pylockParser{},
 	pythonParser{},
 	rubyParser{},
 	uvParser{},

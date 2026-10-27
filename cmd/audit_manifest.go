@@ -41,6 +41,7 @@ var manifestAuditCmd = &cobra.Command{
 			secdb audit manifest --file poetry.lock
 			secdb audit manifest --file uv.lock
 			secdb audit manifest --file pdm.lock
+			secdb audit manifest --file pylock.toml
 
 		Ruby / PHP / Rust:
 			secdb audit manifest --file Gemfile.lock
@@ -77,7 +78,8 @@ var manifestAuditCmd = &cobra.Command{
 		  - package-lock.json, yarn.lock                (npm)
 		  - requirements*.txt                           (Python)
 		  - poetry.lock, uv.lock, pdm.lock              (Python)
-		  - Gemfile.lock                                (Ruby)
+		  - pylock.toml, pylock.*.toml, *.py.lock       (Python)
+		  - Gemfile.lock, gems.locked                   (Ruby)
 		  - pom.xml                                     (Maven)
 		  - gradle.lockfile                             (Gradle)
 		  - Cargo.lock                                  (Rust / Cargo)

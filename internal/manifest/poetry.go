@@ -18,7 +18,7 @@ func (poetryParser) Patterns() []string { return []string{"poetry.lock"} }
 func (poetryParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	var deps []Dependency
 
-	for _, p := range tomlPackages(content) {
+	for _, p := range tomlPackages(content, "package") {
 		name, version := p.fields["name"], p.fields["version"]
 
 		if name == "" || version == "" || !isPoetryIndex(p.fields["source.type"]) {

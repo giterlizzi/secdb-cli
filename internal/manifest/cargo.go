@@ -16,7 +16,7 @@ func (cargoParser) Patterns() []string { return []string{"Cargo.lock"} }
 func (cargoParser) Parse(filename string, content []byte) ([]Dependency, error) {
 	var deps []Dependency
 
-	for _, p := range tomlPackages(content) {
+	for _, p := range tomlPackages(content, "package") {
 		name, version := p.fields["name"], p.fields["version"]
 
 		if name == "" || version == "" || !isCargoRegistry(p.fields["source"]) {
