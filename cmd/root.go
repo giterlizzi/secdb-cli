@@ -65,7 +65,7 @@ func (g *globalOptions) addFlags(cmd *cobra.Command) {
 		"ZEN SecDB API base URL (default: https://secdb.nttzen.cloud/)")
 
 	cmd.PersistentFlags().StringVar(&g.webURL, "web-url", "",
-		"ZEN SecDB web GUI URL for the links in the output, when it differs from --base-url (e.g. behind a proxy)")
+		"ZEN SecDB web GUI URL for the links in the output (default: https://secdb.nttzen.cloud/, even with --base-url)")
 
 	cmd.PersistentFlags().StringVarP(&g.output, "output", "o", "text",
 		"Output format: text, json, yaml, template, html, sarif, csv (sarif/csv: audit only)")

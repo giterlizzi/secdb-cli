@@ -38,10 +38,10 @@ Pre-built binaries for Linux, macOS and Windows (amd64/arm64) are published on t
 
 `--base-url` changes the API address (default `https://secdb.nttzen.cloud`). It can include a path, e.g. a proxy at `https://gateway.example.com/secdb`.
 
-The links printed by the CLI (CVE, CWE and advisory pages, the report footer, the notifications, the editor diagnostics) go to the ZEN SecDB web interface, which is normally on the API host. If you reach the API through a proxy, set `--web-url` to the web interface address so the links don't point to the proxy:
+The links printed by the CLI (CVE, CWE and advisory pages, the report footer, the notifications, the editor diagnostics) always go to the public ZEN SecDB web interface, also when `--base-url` points to a proxy. `--web-url` changes it, for another SecDB instance:
 
 ```bash
-secdb --base-url https://gateway.example.com/secdb --web-url https://secdb.nttzen.cloud cve CVE-2021-44228
+secdb --base-url https://secdb.example.com --web-url https://secdb.example.com cve CVE-2021-44228
 ```
 
 ## Usage

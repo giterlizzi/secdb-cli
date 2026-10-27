@@ -19,6 +19,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- The links in the output (CVE, CWE and advisory pages, report footer,
+  notifications, editor diagnostics) go to the public ZEN SecDB web GUI by
+  default, also with `--base-url`: behind a proxy `--web-url` is no longer
+  needed. For another SecDB instance, set `--web-url` too.
 - `secdb lsp`: the diagnostics of a `pom.xml` are now on the `<dependency>`
   element they refer to, instead of all on the first line.
 

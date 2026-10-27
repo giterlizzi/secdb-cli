@@ -53,8 +53,10 @@ type Config struct {
 	// checks --base-url with ValidateBaseURL first.
 	BaseURL string
 
-	// WebURL is the base of the web-GUI links (default: BaseURL). Set it only
-	// when the API is reached through a proxy, so the GUI isn't on that host.
+	// WebURL is the base of the web-GUI links (default: the public ZEN SecDB,
+	// whatever BaseURL is: a proxy or a mirror serves the public data, so the
+	// links go to the public GUI). Set it only for another SecDB instance,
+	// e.g. a development server.
 	WebURL string
 
 	// APIKey is sent with every request when set. Public data is the same
@@ -75,7 +77,7 @@ func New(cfg Config) *Client {
 		c.baseURL = defaultBaseURL
 	}
 	if c.webURL == "" {
-		c.webURL = c.baseURL
+		c.webURL = defaultBaseURL
 	}
 	return c
 }
@@ -161,8 +163,8 @@ func (c *Client) BaseURL() string {
 }
 
 // WebURL returns the base of the web-GUI permalinks (no trailing slash), e.g.
-// weblink.CVE(WebURL(), id): Config.WebURL when set, else the API base URL,
-// since the ZEN SecDB GUI shares the API host unless a proxy sits in between.
+// weblink.CVE(WebURL(), id): Config.WebURL when set, else the public ZEN
+// SecDB, never the API base URL (which may be a proxy).
 func (c *Client) WebURL() string {
 	return c.webURL
 }
