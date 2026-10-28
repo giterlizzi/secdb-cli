@@ -28,6 +28,7 @@ Pre-built binaries for Linux, macOS and Windows (amd64/arm64) are published on t
 | Environment variable    | Purpose                                                                 |
 |-------------------------|-------------------------------------------------------------------------|
 | `SECDB_API_KEY`         | API key sent as the `X-API-KEY` header on every request                 |
+| `SECDB_BASE_URL`        | API base URL, same as `--base-url` (the flag wins when both are set)    |
 | `SECDB_DEBUG`           | Set to any value to enable debug logging to stderr (same as `--debug`)  |
 | `SECDB_NO_UPDATE_CHECK` | Set to any value to disable the background update check                 |
 | `NO_COLOR`              | Print raw Markdown instead of ANSI-styled `text` output                 |
@@ -36,7 +37,7 @@ Pre-built binaries for Linux, macOS and Windows (amd64/arm64) are published on t
 | `SECDB_SLACK_WEBHOOK`   | Slack Incoming Webhook URL for `--notify`                               |
 | `SECDB_TEAMS_WEBHOOK`   | Microsoft Teams (Power Automate Workflows) webhook URL for `--notify`   |
 
-`--base-url` changes the API address (default `https://secdb.nttzen.cloud`). It can include a path, e.g. a proxy at `https://gateway.example.com/secdb`.
+`--base-url` (or `SECDB_BASE_URL`) changes the API address (default `https://secdb.nttzen.cloud`). It can include a path, e.g. a proxy at `https://gateway.example.com/secdb`.
 
 The links printed by the CLI (CVE, CWE and advisory pages, the report footer, the notifications, the editor diagnostics) always go to the public ZEN SecDB web interface, also when `--base-url` points to a proxy. `--web-url` changes it, for another SecDB instance:
 

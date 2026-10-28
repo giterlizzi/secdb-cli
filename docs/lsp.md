@@ -1,6 +1,6 @@
 # Editor integration (Language Server)
 
-`secdb lsp` is a [Language Server](https://microsoft.github.io/language-server-protocol/): it audits the dependency manifests you open in the editor and shows the vulnerabilities as diagnostics on the dependency lines, each linking to its ZEN SecDB advisory. It uses the same parsers as [`audit manifest`](audit.md#audit-a-dependency-manifest), so it reads the same files (`go.mod`, `package-lock.json`, `yarn.lock`, `requirements*.txt`, `poetry.lock`, `uv.lock`, `pdm.lock`, `pylock.toml`, `Gemfile.lock`, `pom.xml`, `gradle.lockfile`, `Cargo.lock`, `composer.lock`), and the same `SECDB_API_KEY`, `--base-url` and `--web-url`.
+`secdb lsp` is a [Language Server](https://microsoft.github.io/language-server-protocol/): it audits the dependency manifests you open in the editor and shows the vulnerabilities as diagnostics on the dependency lines, each linking to its ZEN SecDB advisory. It uses the same parsers as [`audit manifest`](audit.md#audit-a-dependency-manifest), so it reads the same files (`go.mod`, `package-lock.json`, `yarn.lock`, `requirements*.txt`, `poetry.lock`, `uv.lock`, `pdm.lock`, `pylock.toml`, `Gemfile.lock`, `pom.xml`, `gradle.lockfile`, `Cargo.lock`, `composer.lock`), and the same `SECDB_API_KEY`, `--base-url` (or `SECDB_BASE_URL`) and `--web-url`.
 
 The editor starts the server and talks to it over stdin/stdout; run by hand in a terminal it just waits for input. While you type, the audit waits until you stop for a moment. `SECDB_DEBUG=1` or `--debug` writes a log to stderr.
 

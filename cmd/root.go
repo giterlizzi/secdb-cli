@@ -53,6 +53,10 @@ var rootCmd = &cobra.Command{
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 		global.apiKey = os.Getenv("SECDB_API_KEY")
 
+		if baseURL := os.Getenv("SECDB_BASE_URL"); baseURL != "" && !cmd.Flags().Changed("base-url") {
+			global.baseURL = baseURL
+		}
+
 		startBackgroundUpdateCheck(cmd)
 		setupLogging()
 
@@ -62,7 +66,7 @@ var rootCmd = &cobra.Command{
 
 func (g *globalOptions) addFlags(cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&g.baseURL, "base-url", "",
-		"ZEN SecDB API base URL (default: https://secdb.nttzen.cloud/)")
+		"ZEN SecDB API base URL, or SECDB_BASE_URL (default: https://secdb.nttzen.cloud/)")
 
 	cmd.PersistentFlags().StringVar(&g.webURL, "web-url", "",
 		"ZEN SecDB web GUI URL for the links in the output (default: https://secdb.nttzen.cloud/, even with --base-url)")
@@ -115,7 +119,7 @@ func (g *globalOptions) validate(cmd *cobra.Command) error {
 
 	u, err := client.ValidateBaseURL(g.baseURL)
 	if err != nil {
-		return fmt.Errorf("invalid --base-url %q: %w", g.baseURL, err)
+		return fmt.Errorf("invalid base URL %q (--base-url or SECDB_BASE_URL): %w", g.baseURL, err)
 	}
 	g.baseURL = u
 
@@ -128,7 +132,7 @@ func (g *globalOptions) validate(cmd *cobra.Command) error {
 	// The API key travels in a header: warn when it would cross the network in
 	// clear text (a local dev server is fine).
 	if g.apiKey != "" && strings.HasPrefix(g.baseURL, "http://") && !client.IsLoopback(g.baseURL) {
-		slog.Warn("--base-url uses plain http: the API key is sent unencrypted", "base_url", g.baseURL)
+		slog.Warn("the base URL uses plain http: the API key is sent unencrypted", "base_url", g.baseURL)
 	}
 
 	// The effective values, after the defaults; the API key itself never goes

@@ -67,7 +67,8 @@ var lspCmd = &cobra.Command{
 		The server speaks JSON-RPC over stdin/stdout, so it is meant to be
 		launched by an editor's LSP client, not run interactively (in a plain
 		terminal it just waits for input). It honors the same SECDB_API_KEY,
-		--base-url and --web-url configuration as the other commands.
+		--base-url (or SECDB_BASE_URL) and --web-url configuration as the
+		other commands.
 	`),
 	Example: heredoc.Doc(`
 		Run the server (usually done by the editor, not by hand):

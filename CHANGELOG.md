@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   audited, transitive, test and dev ones included, with its lines for the
   editor diagnostics and SARIF; your own workspace packages and the ones from
   git, a local path or a URL are skipped.
+- `SECDB_BASE_URL` sets the API base URL, like `--base-url` (the flag wins
+  when both are set): handy for editors, CI and hosts behind a proxy.
 
 ### Changed
 
