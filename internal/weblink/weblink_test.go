@@ -17,6 +17,9 @@ func TestLinks(t *testing.T) {
 		{"path", Path("https://secdb.example.com", "/security-advisory/detail/MAVEN:GHSA-H383-GMXW-35V2"), "https://secdb.example.com/security-advisory/detail/MAVEN:GHSA-H383-GMXW-35V2"},
 		{"path with prefix", Path("https://gateway.example.com/secdb", "/cve/detail/CVE-2021-44228"), "https://gateway.example.com/secdb/cve/detail/CVE-2021-44228"},
 		{"empty path", Path("https://secdb.example.com", ""), ""},
+		{"absolute link keeps only its path", Path("https://secdb.example.com", "http://127.0.0.1:3000/cve/detail/CVE-2021-44228"), "https://secdb.example.com/cve/detail/CVE-2021-44228"},
+		{"absolute link with prefix", Path("https://gateway.example.com/secdb", "https://secdb.nttzen.cloud/security-advisory/detail/MAVEN:GHSA-H383-GMXW-35V2"), "https://gateway.example.com/secdb/security-advisory/detail/MAVEN:GHSA-H383-GMXW-35V2"},
+		{"query kept", Path("https://secdb.example.com", "https://other.example.com/search?q=log4j&type=cve"), "https://secdb.example.com/search?q=log4j&type=cve"},
 	}
 	for _, tt := range tests {
 		if tt.got != tt.want {

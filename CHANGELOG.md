@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `search`: the result links stay correct when the API returns absolute
+  URLs instead of paths; they still follow `--web-url`.
 - `audit linux` with `--host localhost` or `--host 127.0.0.1` (or an
   `ssh://user@127.0.0.1:2222` URI) audited the local machine, ignoring the SSH
   user and port. An explicit host now always means SSH, loopback included (VMs

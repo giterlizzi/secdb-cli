@@ -27,11 +27,21 @@ func Advisory(webURL, id string) string {
 	return join(webURL, "security-advisory", "detail", id)
 }
 
-// Path returns the permalink to a web-GUI path the API already built, such as
-// a search hit's path (e.g. "/cve/detail/CVE-2021-44228"); empty when path is.
-func Path(webURL, path string) string {
-	if path == "" {
+// Path returns the permalink to a web-GUI page the API already built, such as
+// a search hit's web_url (e.g. "/cve/detail/CVE-2021-44228"); empty when link
+// is. Only the path and query of link are kept, whether the API sent a path or
+// an absolute URL, so the permalink always follows webURL (--web-url).
+func Path(webURL, link string) string {
+	if link == "" {
 		return ""
 	}
-	return join(webURL, path)
+	u, err := url.Parse(link)
+	if err != nil {
+		return join(webURL, link)
+	}
+	p := join(webURL, u.Path)
+	if u.RawQuery != "" {
+		p += "?" + u.RawQuery
+	}
+	return p
 }
