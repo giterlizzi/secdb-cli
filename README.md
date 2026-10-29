@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="secdb" width="128">
+</p>
+
 # ZEN SecDB CLI
 
 [![CI](https://github.com/giterlizzi/secdb-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/giterlizzi/secdb-cli/actions/workflows/ci.yml)
