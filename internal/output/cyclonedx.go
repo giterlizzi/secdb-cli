@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
+	"github.com/giterlizzi/secdb-cli/internal/ci"
 	"github.com/giterlizzi/secdb-cli/internal/meta"
 	"github.com/giterlizzi/secdb-cli/internal/weblink"
 
@@ -22,6 +23,10 @@ import (
 type CycloneDXOptions struct {
 	// WebURL is the web-GUI base of the advisory permalinks.
 	WebURL string
+
+	CI ci.Env
+
+	Subject Subject
 }
 
 // WriteCycloneDX writes the advisories as a CycloneDX 1.6 vulnerability
@@ -46,20 +51,36 @@ func WriteCycloneDX(w io.Writer, advisories []audit.AdvisoryResult, opts Cyclone
 
 	components := []cdx.Component{}
 	vulns := []cdx.Vulnerability{}
+
 	seen := map[string]bool{}
+	deps := []string{}
+
 	for _, adv := range advisories {
 		for _, purl := range adv.PURLs {
 			if !seen[purl] {
 				seen[purl] = true
-				components = append(components, cdxComponent(purl))
+				component := cdxComponent(purl)
+				components = append(components, component)
+				deps = append(deps, component.BOMRef)
 			}
 		}
 		for _, g := range groupByAnalysis(adv) {
 			vulns = append(vulns, cdxVulnerability(adv, g.purls, g.analysis, opts.WebURL))
 		}
 	}
+
 	bom.Components = &components
 	bom.Vulnerabilities = &vulns
+
+	if opts.Subject.Name != "" {
+		bom.Metadata.Component = &cdx.Component{
+			BOMRef:  "subject",
+			Type:    cdx.ComponentType(opts.Subject.Type),
+			Name:    opts.Subject.Name,
+			Version: opts.Subject.Version,
+		}
+		bom.Dependencies = &[]cdx.Dependency{{Ref: "subject", Dependencies: &deps}}
+	}
 
 	enc := cdx.NewBOMEncoder(w, cdx.BOMFileFormatJSON)
 	enc.SetPretty(true)
@@ -114,6 +135,9 @@ func cdxVulnerability(adv audit.AdvisoryResult, purls []string, analysis *cdx.Vu
 	if !adv.Published.IsZero() {
 		v.Published = adv.Published.UTC().Format(time.RFC3339)
 	}
+	if !adv.Modified.IsZero() {
+		v.Updated = adv.Modified.UTC().Format(time.RFC3339)
+	}
 
 	ratings := []cdx.VulnerabilityRating{}
 	for _, c := range adv.CVSS {
@@ -163,9 +187,19 @@ func cdxVulnerability(adv audit.AdvisoryResult, purls []string, analysis *cdx.Vu
 		}
 	}
 
-	// CycloneDX has no KEV field: a property per CVE in the catalog, and the
-	// catalog entry among the advisories for a reader.
+	// CycloneDX has no EPSS field (a rating is a severity, EPSS a
+	// probability): the highest score of the advisory's CVEs as properties.
 	var props []cdx.Property
+	if adv.EPSS != nil {
+		props = append(props,
+			cdx.Property{Name: "secdb:epss_score", Value: strconv.FormatFloat(adv.EPSS.Score, 'f', -1, 64)},
+			cdx.Property{Name: "secdb:epss_percentile", Value: strconv.FormatFloat(adv.EPSS.Percentile, 'f', -1, 64)},
+			cdx.Property{Name: "secdb:epss_date", Value: adv.EPSS.Date},
+		)
+	}
+
+	// No KEV field either: a property per CVE in the catalog, and the catalog
+	// entry among the advisories for a reader.
 	for _, k := range adv.KEV {
 		props = append(props, cdx.Property{Name: "secdb:cisa_kev", Value: k.CVE})
 		advisories = append(advisories, cdx.Advisory{

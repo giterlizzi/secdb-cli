@@ -4,9 +4,11 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
+	"github.com/giterlizzi/secdb-cli/internal/output"
 	"github.com/giterlizzi/secdb-cli/internal/report"
 
 	"github.com/MakeNowJust/heredoc/v2"
@@ -61,8 +63,13 @@ var sbomAuditCmd = &cobra.Command{
 		}
 
 		source := "SBOM (" + sbomOpts.file + ")"
-		return runPURLAudit(purls, &sbomOpts.audit, auditTarget{
+		name := filepath.Base(sbomOpts.file)
+
+		// Read the metadata.component.name ?
+
+		return runPURLAudit(purls, &sbomOpts.audit, auditReport{
 			source:    source,
+			subject:   output.Subject{Type: "file", Name: name},
 			sarifFile: sbomOpts.file,
 			meta: []report.MetaItem{
 				{Label: "Source", Value: source},

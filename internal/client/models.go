@@ -4,7 +4,12 @@
 
 package client
 
-import "time"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+)
 
 type purlAuditRequest struct {
 	Purls []string `json:"purls"`
@@ -89,6 +94,33 @@ type Advisory struct {
 		DueDate         Timestamp `json:"due_date"`
 		KnownRansomware string    `json:"known_ransomware_campaign_use"`
 	} `json:"cisa_kev"`
+	// EPSS lists the EPSS score of the advisory's CVEs (empty when none has
+	// one); Date is the day of the scores, "2026-10-29".
+	EPSS []struct {
+		CVEID      string `json:"cve_id"`
+		Score      Number `json:"score"`
+		Percentile Number `json:"percentile"`
+		Date       string `json:"date"`
+	} `json:"epss"`
+}
+
+// Number is a float64 the API may send as a JSON string ("0.999990", e.g. the
+// EPSS score); it is written back as a JSON number.
+type Number float64
+
+// UnmarshalJSON decodes a number or a string holding one.
+func (n *Number) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "" || s == "null" {
+		*n = 0
+		return nil
+	}
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return fmt.Errorf("invalid number %s: %w", b, err)
+	}
+	*n = Number(f)
+	return nil
 }
 
 type ssvcBulkRequest struct {

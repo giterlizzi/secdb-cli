@@ -20,12 +20,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   DefectDojo import (Generic Findings Import, one finding per advisory and
   package, ready for `reimport-scan`), and `--output=cyclonedx` writes a
   CycloneDX 1.6 vulnerability report. Both carry the manifest location, the
-  accepted risks of the ignore file, the CVEs in the CISA KEV catalog and,
-  with `--show-unfixed`, the missing fixes.
+  accepted risks of the ignore file, the EPSS score, the CVEs in the CISA
+  KEV catalog and, with `--show-unfixed`, the missing fixes. The CycloneDX
+  report also names what was audited (the project, the SBOM file, the
+  distribution or the container) as its subject, depending on the affected
+  packages.
 - `audit` commands: the `json` and `yaml` output (and `--jq`) include each
   advisory's `cisa_kev`, its CVEs in the CISA Known Exploited Vulnerabilities
   catalog (`cve_id`, `added_date`, `due_date`,
-  `known_ransomware_campaign_use`).
+  `known_ransomware_campaign_use`), and `epss`, the EPSS score of its CVEs
+  (`cve_id`, `score`, `percentile`, `date`; the scores are numbers).
 - `SECDB_BASE_URL` sets the API base URL, like `--base-url` (the flag wins
   when both are set): handy for editors, CI and hosts behind a proxy.
 

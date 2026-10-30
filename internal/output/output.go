@@ -37,6 +37,16 @@ type Options struct {
 	JQ *JQ
 }
 
+// Subject is what an audit report is about, the CycloneDX metadata.component
+// that depends on the affected packages. Type is a CycloneDX component type
+// (application, file, operating-system, container); a zero Subject (no Name)
+// leaves the report without one.
+type Subject struct {
+	Type    string
+	Name    string
+	Version string
+}
+
 // SourceLocation maps a PURL to the manifest file and line it came from, for
 // SARIF attribution.
 type SourceLocation struct {

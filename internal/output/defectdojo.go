@@ -62,6 +62,8 @@ type ddFinding struct {
 	VulnIDFromTool   string   `json:"vuln_id_from_tool"`
 	FixAvailable     *bool    `json:"fix_available,omitempty"`
 	RiskAccepted     bool     `json:"risk_accepted,omitempty"`
+	EPSSScore        float64  `json:"epss_score,omitempty"`
+	EPSSPercentile   float64  `json:"epss_percentile,omitempty"`
 	KnownExploited   bool     `json:"known_exploited,omitempty"`
 	KEVDate          string   `json:"kev_date,omitempty"`
 	RansomwareUsed   bool     `json:"ransomware_used,omitempty"`
@@ -76,7 +78,8 @@ var cweIDRe = regexp.MustCompile(`^CWE-\d+$`)
 // Import report, one finding per (advisory, package), for import-scan and
 // reimport-scan. unique_id_from_tool is a hash of the advisory and the PURL
 // (ddUniqueID), so a reimport matches the same finding; an ignore rule marks the finding
-// risk_accepted, an advisory with no fix sets fix_available false, a CVE in the
+// risk_accepted, an advisory with no fix sets fix_available false, the
+// highest EPSS of its CVEs sets epss_score and epss_percentile, a CVE in the
 // CISA KEV catalog sets known_exploited, kev_date (the earliest added date)
 // and, when the catalog says "Known", ransomware_used.
 func WriteDefectDojo(w io.Writer, advisories []audit.AdvisoryResult, opts DefectDojoOptions) error {
@@ -112,6 +115,9 @@ func ddFindingFor(adv audit.AdvisoryResult, purl, pkg string, opts DefectDojoOpt
 	}
 	if !adv.Published.IsZero() {
 		f.Date = adv.Published.Format("2006-01-02")
+	}
+	if adv.EPSS != nil {
+		f.EPSSScore, f.EPSSPercentile = adv.EPSS.Score, adv.EPSS.Percentile
 	}
 	for _, k := range adv.KEV {
 		f.KnownExploited = true

@@ -34,8 +34,8 @@ type auditOptions struct {
 	ignore *audit.IgnoreFile
 }
 
-// auditTarget describes what an audit command audited, for the report.
-type auditTarget struct {
+// auditReport describes what an audit command audited, for the report.
+type auditReport struct {
 	// source names it for the notifications, e.g. "SBOM (bom.json)".
 	source string
 
@@ -51,6 +51,10 @@ type auditTarget struct {
 	// unless sarifSources has the finding's PURL (audit manifest).
 	sarifFile    string
 	sarifSources map[string]output.SourceLocation
+
+    // subject is what was audited, for the CycloneDX metadata.component: the
+    // project, the SBOM file, the OS or the container; none for a PURL list.
+	subject output.Subject
 }
 
 // addFlags registers the shared audit flags on cmd, and validates them in its
@@ -155,8 +159,18 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 		return err
 	}
 
-	return reportAudit(items, opts, client.WebURL(), auditTarget{
+	subject := output.Subject{Type: "operating-system", Name: info.OS, Version: info.Version}
+
+	switch {
+	case target.Image != "":
+		subject = output.Subject{Type: "container", Name: target.Image}
+	case target.Container != "":
+		subject = output.Subject{Type: "container", Name: target.Container}
+	}
+
+	return reportAudit(items, opts, client.WebURL(), auditReport{
 		source:    target.Describe(),
+		subject:   subject,
 		template:  "audit-linux",
 		sarifFile: fmt.Sprintf("%s/%s", info.OS, info.Version),
 		meta: []report.MetaItem{
@@ -171,7 +185,7 @@ func runPackageAudit(target inventory.Target, opts *auditOptions) error {
 // runPURLAudit audits purls against ZEN SecDB and reports the result with the
 // audit-purl templates. It is the shared tail of the audit purl, sbom and
 // manifest commands, which describe what they read in target.
-func runPURLAudit(purls []string, opts *auditOptions, target auditTarget) error {
+func runPURLAudit(purls []string, opts *auditOptions, target auditReport) error {
 	client := global.newClient()
 	items, err := client.PURLAudit(purls)
 	if err != nil {
@@ -187,7 +201,7 @@ func runPURLAudit(purls []string, opts *auditOptions, target auditTarget) error 
 // (--notify), then applies --fail-on. webURL is the web-GUI base of the
 // permalinks, the report footer and the notifications. All flags were
 // validated up front (auditOptions.validate).
-func reportAudit(items []client.AuditItem, opts *auditOptions, webURL string, target auditTarget) error {
+func reportAudit(items []client.AuditItem, opts *auditOptions, webURL string, target auditReport) error {
 	res := audit.Analyze(items, opts.ignore, opts.showUnfixed)
 
 	if err := writeAuditOutput(res, opts, webURL, target); err != nil {
@@ -204,7 +218,7 @@ func reportAudit(items []client.AuditItem, opts *auditOptions, webURL string, ta
 }
 
 // writeAuditOutput writes the audit result to stdout in the --output format.
-func writeAuditOutput(res audit.Result, opts *auditOptions, webURL string, target auditTarget) error {
+func writeAuditOutput(res audit.Result, opts *auditOptions, webURL string, target auditReport) error {
 	switch global.output {
 	case "text":
 		return writeAuditText(res, opts, webURL, target)
@@ -223,7 +237,7 @@ func writeAuditOutput(res audit.Result, opts *auditOptions, webURL string, targe
 			Sources: target.sarifSources,
 		})
 	case "cyclonedx":
-		return output.WriteCycloneDX(os.Stdout, res.Advisories, output.CycloneDXOptions{WebURL: webURL})
+		return output.WriteCycloneDX(os.Stdout, res.Advisories, output.CycloneDXOptions{WebURL: webURL, Subject: target.subject, CI: ci.Detect()})
 	default:
 		if err := output.Render(os.Stdout, res.Items, output.Format(global.output), global.outputOptions()); err != nil {
 			return fmt.Errorf("failed to render output: %w", err)
@@ -236,7 +250,7 @@ func writeAuditOutput(res audit.Result, opts *auditOptions, webURL string, targe
 // header has the command's rows, the CI run, a warning when unfixed
 // vulnerabilities were hidden (pointing at --show-unfixed) and, in the details
 // view, how many advisories the ignore file accepts.
-func writeAuditText(res audit.Result, opts *auditOptions, webURL string, target auditTarget) error {
+func writeAuditText(res audit.Result, opts *auditOptions, webURL string, target auditReport) error {
 	r := report.Report{
 		Meta:    slices.Concat(target.meta, ciMeta(ci.Detect())),
 		Results: res.Packages,

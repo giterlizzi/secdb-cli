@@ -5,6 +5,7 @@ package cmd
 import (
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strconv"
 
 	"github.com/giterlizzi/secdb-cli/internal/audit"
@@ -102,8 +103,10 @@ var manifestAuditCmd = &cobra.Command{
 		}
 
 		source := fmt.Sprintf("manifest (%s)", manifestOpts.source())
-		return runPURLAudit(purls, &manifestOpts.audit, auditTarget{
+
+		return runPURLAudit(purls, &manifestOpts.audit, auditReport{
 			source:       source,
+			subject:      output.Subject{Type: "application", Name: manifestOpts.project()},
 			sarifSources: sources,
 			meta: []report.MetaItem{
 				{Label: "Source", Value: source},
@@ -138,6 +141,19 @@ func (o *manifestOptions) source() string {
 		return o.dir
 	}
 	return o.file
+}
+
+// project is the name of the audited project: the --directory, or the
+// directory holding the --file, by its base name.
+func (o *manifestOptions) project() string {
+	dir := o.dir
+	if dir == "" {
+		dir = filepath.Dir(o.file)
+	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	return filepath.Base(dir)
 }
 
 // files returns the manifests to audit: the --file, or the supported manifests

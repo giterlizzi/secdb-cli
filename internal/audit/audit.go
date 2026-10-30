@@ -33,6 +33,7 @@ type AdvisoryResult struct {
 	Description  string
 	Solution     string
 	Published    time.Time
+	Modified     time.Time
 	Severity     string
 	Packages     []string
 	PURLs        []string
@@ -48,6 +49,16 @@ type AdvisoryResult struct {
 	Unfixed      bool
 	UnfixedPURLs map[string]bool
 	KEV          []KEV
+	EPSS         *EPSS
+}
+
+// EPSS is the highest EPSS score among the advisory's CVEs, with the
+// percentile of that same CVE (both 0-1) and the day of the scores.
+type EPSS struct {
+	CVE        string
+	Score      float64
+	Percentile float64
+	Date       string
 }
 
 // KEV is one of the advisory's CVEs in the CISA Known Exploited
@@ -306,6 +317,7 @@ func newAdvisoryResult(adv client.Advisory) *AdvisoryResult {
 		Description: adv.Description,
 		Solution:    adv.Solution,
 		Published:   adv.Published.Time,
+		Modified:    adv.Modified.Time,
 		URL:         adv.URL,
 		References:  referenceURLs(adv),
 		Severity:    NormalizeSeverity(adv.Severity),
@@ -314,7 +326,20 @@ func newAdvisoryResult(adv client.Advisory) *AdvisoryResult {
 		CVSSScore:   latestCVSSScore(adv),
 		CVSS:        cvssScores(adv),
 		KEV:         kevEntries(adv),
+		EPSS:        maxEPSS(adv),
 	}
+}
+
+// maxEPSS returns the advisory's highest EPSS score, the CVE most likely to be
+// exploited deciding its priority, or nil when none of its CVEs has one.
+func maxEPSS(adv client.Advisory) *EPSS {
+	var out *EPSS
+	for _, e := range adv.EPSS {
+		if out == nil || float64(e.Score) > out.Score {
+			out = &EPSS{CVE: e.CVEID, Score: float64(e.Score), Percentile: float64(e.Percentile), Date: e.Date}
+		}
+	}
+	return out
 }
 
 // kevEntries returns the advisory's CISA KEV entries, in the API order.

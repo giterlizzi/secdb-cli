@@ -66,8 +66,9 @@ var purlAuditCmd = &cobra.Command{
 
 		--output=defectdojo writes the findings for a DefectDojo import (Generic
 		Findings Import), --output=cyclonedx a CycloneDX 1.6 vulnerability
-		report. Both mark the advisories with a CVE in the CISA KEV catalog,
-		which the json and yaml output list in each advisory's cisa_kev.
+		report. Both carry the EPSS score and mark the advisories with a CVE in
+		the CISA KEV catalog, which the json and yaml output list in each
+		advisory's epss and cisa_kev.
 	`),
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -76,7 +77,7 @@ var purlAuditCmd = &cobra.Command{
 			return err
 		}
 
-		return runPURLAudit(purls, &purlOpts.audit, auditTarget{
+		return runPURLAudit(purls, &purlOpts.audit, auditReport{
 			source:    source,
 			sarifFile: purlOpts.sbom,
 			meta: []report.MetaItem{

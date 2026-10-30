@@ -161,16 +161,24 @@ secdb audit sbom --file bom.json --fail-on=high
 
 The report is printed first, in any output format, then the command exits with status `2` if a vulnerability reaches the threshold. Findings accepted in the ignore file and hidden unfixed vulnerabilities don't count. Any other error exits with `1`.
 
-### Known exploited vulnerabilities (CISA KEV)
+### Exploitation: CISA KEV and EPSS
 
-Each advisory of the `json` and `yaml` output has `cisa_kev`: its CVEs in the CISA Known Exploited Vulnerabilities catalog, with `cve_id`, `added_date`, `due_date` and `known_ransomware_campaign_use` (`Known` or `Unknown`, as in the catalog). The list is empty when none of its CVEs is in the catalog.
+Each advisory of the `json` and `yaml` output has:
+
+- `cisa_kev`: its CVEs in the CISA Known Exploited Vulnerabilities catalog, with `cve_id`, `added_date`, `due_date` and `known_ransomware_campaign_use` (`Known` or `Unknown`, as in the catalog);
+- `epss`: the [EPSS](https://www.first.org/epss/) score of its CVEs, the probability of exploitation in the next 30 days, with `cve_id`, `score` and `percentile` (both from 0 to 1) and the `date` of the scores.
+
+Each list is empty when none of the advisory's CVEs has an entry.
 
 ```bash
 # The exploited advisories of an audit
 secdb audit sbom --file bom.json --jq '.[].advisories[] | select(.cisa_kev | length > 0) | .id'
+
+# The advisories with a CVE more than 10% likely to be exploited
+secdb audit sbom --file bom.json --jq '.[].advisories[] | select(any(.epss[]; .score > 0.1)) | .id'
 ```
 
-The [DefectDojo](#defectdojo) and [CycloneDX](#cyclonedx) output carry it too.
+The [DefectDojo](#defectdojo) and [CycloneDX](#cyclonedx) output carry both too.
 
 ### SARIF
 
@@ -204,7 +212,7 @@ secdb audit manifest --file go.mod --output=defectdojo > findings.json
 
 Writes the findings in the [DefectDojo](https://www.defectdojo.org/) "Generic Findings Import" format: one finding for each (advisory, package) pair, with title (`<advisory>: <package>`), severity, description, the advisory's solution as mitigation, CVEs, CWEs, CVSS 3.x and 4.0 vectors and scores, the package as component name and version, the publication date, and the ZEN SecDB advisory page first among the references. The location is the same as in [SARIF](#sarif): the manifest file and line for `audit manifest`, the SBOM file for `audit sbom`, `OS/version` for `audit linux` and `audit docker`.
 
-`unique_id_from_tool` is a SHA-256 of the advisory and the PURL (not of the file, so moving a manifest keeps it), so a reimport into the same test updates the findings instead of duplicating them. A finding accepted in the ignore file is imported as `risk_accepted`, with the rule's reason at the end of the description; with `--show-unfixed`, an advisory with no fix for the package has `fix_available: false`. An advisory with a CVE in the CISA Known Exploited Vulnerabilities (KEV) catalog has `known_exploited: true`, `kev_date` (the earliest date one of its CVEs was added to the catalog) and, when the catalog reports its use in ransomware campaigns, `ransomware_used: true`.
+`unique_id_from_tool` is a SHA-256 of the advisory and the PURL (not of the file, so moving a manifest keeps it), so a reimport into the same test updates the findings instead of duplicating them. A finding accepted in the ignore file is imported as `risk_accepted`, with the rule's reason at the end of the description; with `--show-unfixed`, an advisory with no fix for the package has `fix_available: false`. `epss_score` and `epss_percentile` are the highest EPSS score among the advisory's CVEs and the percentile of that same CVE. An advisory with a CVE in the CISA Known Exploited Vulnerabilities (KEV) catalog has `known_exploited: true`, `kev_date` (the earliest date one of its CVEs was added to the catalog) and, when the catalog reports its use in ransomware campaigns, `ransomware_used: true`.
 
 Import it with the DefectDojo API (`reimport-scan` in CI, so fixed findings get closed):
 
@@ -224,6 +232,18 @@ secdb audit sbom --file bom.json --output=cyclonedx > vdr.json
 
 Writes a [CycloneDX](https://cyclonedx.org/) 1.6 vulnerability disclosure report: the affected packages as components (referenced by PURL) and one vulnerability for each advisory, listing its packages in `affects`, with the ZEN SecDB advisory as source, the CVSS ratings, CWEs, description, the solution as recommendation, the CVEs as references (an advisory is one vulnerability, its CVEs are its other ids, so nothing is counted twice) and the advisory links. Tools that read CycloneDX vulnerabilities, such as DefectDojo ("CycloneDX Scan"), can import it.
 
+The report describes what was audited in `metadata.component`, and its `dependencies` say that this subject depends on the affected packages:
+
+| Command | `metadata.component` |
+|---|---|
+| `audit manifest` | `application`, named after the project directory (the `--directory`, or the one holding the `--file`) |
+| `audit sbom` | `file`, the SBOM's file name |
+| `audit linux` | `operating-system`, the distribution and its version |
+| `audit docker` | `container`, the image or container name |
+| `audit purl` | none: a list of PURLs has no subject, so there are no `dependencies` either |
+
+The names carry no local path. The `components` and the `dependencies` list only the affected packages, not every package audited.
+
 Each vulnerability carries an `analysis`. It applies to all the packages in `affects`, so when they differ (an ignore rule for one package only, a fix missing for one) the advisory appears once for each analysis:
 
 | Finding | `state` | `response` | `detail` |
@@ -234,7 +254,7 @@ Each vulnerability carries an `analysis`. It applies to all the packages in `aff
 
 An ignore rule accepts a risk, it doesn't say the package isn't affected, so it is not `not_affected`.
 
-CycloneDX has no field for the CISA KEV catalog: each CVE of the advisory in the catalog adds a `secdb:cisa_kev` property (its value is the CVE) and a link to the CVE's entry in the catalog among the `advisories`.
+CycloneDX has no field for EPSS or the CISA KEV catalog. The highest EPSS score among the advisory's CVEs, and the percentile of that CVE, are the `secdb:epss_score` and `secdb:epss_percentile` properties, with the day of the scores in `secdb:epss_date` (not a rating: a rating is a severity, EPSS a probability). Each CVE of the advisory in the KEV catalog adds a `secdb:cisa_kev` property (its value is the CVE) and a link to the CVE's entry in the catalog among the `advisories`.
 
 ### Accepted risks (.secdbignore)
 
