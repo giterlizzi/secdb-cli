@@ -80,6 +80,15 @@ type Advisory struct {
 		VERS        string `json:"vers"`
 		Remediation string `json:"remediation"`
 	} `json:"packages"`
+	// CISAKEV lists the advisory's CVEs in the CISA KEV catalog (empty when
+	// none). The API also returns the catalog's texts (notes, required_action,
+	// ...); they are in the CVE feed, so only these fields are kept.
+	CISAKEV []struct {
+		CVEID           string    `json:"cve_id"`
+		AddedDate       Timestamp `json:"added_date"`
+		DueDate         Timestamp `json:"due_date"`
+		KnownRansomware string    `json:"known_ransomware_campaign_use"`
+	} `json:"cisa_kev"`
 }
 
 type ssvcBulkRequest struct {
