@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   audited, transitive, test and dev ones included, with its lines for the
   editor diagnostics and SARIF; your own workspace packages and the ones from
   git, a local path or a URL are skipped.
+- `audit` commands: `--output=defectdojo` writes the findings for a
+  DefectDojo import (Generic Findings Import, one finding per advisory and
+  package, ready for `reimport-scan`), and `--output=cyclonedx` writes a
+  CycloneDX 1.6 vulnerability report. Both carry the manifest location, the
+  accepted risks of the ignore file, the CVEs in the CISA KEV catalog and,
+  with `--show-unfixed`, the missing fixes.
+- `audit` commands: the `json` and `yaml` output (and `--jq`) include each
+  advisory's `cisa_kev`, its CVEs in the CISA Known Exploited Vulnerabilities
+  catalog (`cve_id`, `added_date`, `due_date`,
+  `known_ransomware_campaign_use`).
 - `SECDB_BASE_URL` sets the API base URL, like `--base-url` (the flag wins
   when both are set): handy for editors, CI and hosts behind a proxy.
 
@@ -43,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and every document URI is normalized (`file:///c%3A/...` and
   `file:///C:/...` are the same file), so a file is never audited or reported
   under two URIs.
+- `ssvc calculate`: the `Track*` entry of the decision legend is no longer
+  rendered as broken bold text.
+
+### Security
+
+- Built with Go 1.26.10, which fixes GO-2026-6809 in `crypto/x509`, reached
+  by the HTTPS calls; `golang.org/x/net` updated to v0.62.0.
 
 ## [0.7.0] - 2026-10-16
 

@@ -41,16 +41,22 @@ func WriteSARIF(w io.Writer, advisories []audit.AdvisoryResult, opts SARIFOption
 
 	for _, adv := range advisories {
 		for _, purl := range adv.PURLs {
-			file, line := opts.File, 0
-			if loc, ok := opts.Sources[purl]; ok {
-				file, line = loc.File, loc.Line
-			}
+			file, line := locate(purl, opts.File, opts.Sources)
 			addFinding(run, adv, purl, file, line)
 		}
 	}
 
 	sarifReport.AddRun(run)
 	return sarifReport.PrettyWrite(w)
+}
+
+// locate returns where purl is declared: its manifest file and line when
+// sources has it (audit manifest), else file (the SBOM, the OS) and line 0.
+func locate(purl, file string, sources map[string]SourceLocation) (string, int) {
+	if loc, ok := sources[purl]; ok {
+		return loc.File, loc.Line
+	}
+	return file, 0
 }
 
 // addFinding adds the rule and the result of one (advisory, package) pair to

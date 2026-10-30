@@ -86,8 +86,8 @@ var manifestAuditCmd = &cobra.Command{
 		  - composer.lock                               (PHP / Composer)
 
 		Results are shaped and rendered exactly like "audit purl": --view,
-		--fail-on, --ignore-file, --show-unfixed and --output=sarif/csv all
-		behave the same way.
+		--fail-on, --ignore-file, --show-unfixed and
+		--output=sarif/csv/defectdojo/cyclonedx all behave the same way.
 	`),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {

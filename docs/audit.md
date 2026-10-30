@@ -28,7 +28,7 @@ command | secdb audit purl
 
 [Package URLs](https://github.com/package-url/purl-spec) are read from the arguments, else from `--file`/`-f`, else from stdin. Invalid PURLs are skipped and duplicates are removed. For a CycloneDX SBOM use [`audit sbom`](#audit-a-cyclonedx-sbom).
 
-In `text` output the report starts with a short header: where the PURLs came from (arguments, file or stdin) and how many were scanned. The header is not part of the `json`, `yaml`, `sarif` or `csv` output.
+In `text` output the report starts with a short header: where the PURLs came from (arguments, file or stdin) and how many were scanned. The header is not part of the `json`, `yaml`, `sarif`, `csv`, `defectdojo` or `cyclonedx` output.
 
 | Flag | Description |
 |---|---|
@@ -161,6 +161,17 @@ secdb audit sbom --file bom.json --fail-on=high
 
 The report is printed first, in any output format, then the command exits with status `2` if a vulnerability reaches the threshold. Findings accepted in the ignore file and hidden unfixed vulnerabilities don't count. Any other error exits with `1`.
 
+### Known exploited vulnerabilities (CISA KEV)
+
+Each advisory of the `json` and `yaml` output has `cisa_kev`: its CVEs in the CISA Known Exploited Vulnerabilities catalog, with `cve_id`, `added_date`, `due_date` and `known_ransomware_campaign_use` (`Known` or `Unknown`, as in the catalog). The list is empty when none of its CVEs is in the catalog.
+
+```bash
+# The exploited advisories of an audit
+secdb audit sbom --file bom.json --jq '.[].advisories[] | select(.cisa_kev | length > 0) | .id'
+```
+
+The [DefectDojo](#defectdojo) and [CycloneDX](#cyclonedx) output carry it too.
+
 ### SARIF
 
 ```bash
@@ -184,6 +195,46 @@ secdb audit sbom --file bom.json --output=csv > report.csv
 One row per advisory, with the columns `ID, Title, Severity, CVSS, CVEs, CWEs, Packages, URL, Ignored, Ignore Reason`. CVEs, CWEs and packages are joined with `"; "` in a single cell, and the text cells are quoted as in RFC 4180. A cell that starts with `=`, `+`, `-` or `@` gets a leading `'`, so a spreadsheet doesn't run it as a formula. `--view` has no effect on it.
 
 The columns are fixed. For a layout of your own use `--output=template --template-file my.tmpl`, or `--jq` (see [Output formats](output.md)): both work on the raw API response, one item per package with its `advisories`, not on the per-advisory rows of the CSV.
+
+### DefectDojo
+
+```bash
+secdb audit manifest --file go.mod --output=defectdojo > findings.json
+```
+
+Writes the findings in the [DefectDojo](https://www.defectdojo.org/) "Generic Findings Import" format: one finding for each (advisory, package) pair, with title (`<advisory>: <package>`), severity, description, the advisory's solution as mitigation, CVEs, CWEs, CVSS 3.x and 4.0 vectors and scores, the package as component name and version, the publication date, and the ZEN SecDB advisory page first among the references. The location is the same as in [SARIF](#sarif): the manifest file and line for `audit manifest`, the SBOM file for `audit sbom`, `OS/version` for `audit linux` and `audit docker`.
+
+`unique_id_from_tool` is a SHA-256 of the advisory and the PURL (not of the file, so moving a manifest keeps it), so a reimport into the same test updates the findings instead of duplicating them. A finding accepted in the ignore file is imported as `risk_accepted`, with the rule's reason at the end of the description; with `--show-unfixed`, an advisory with no fix for the package has `fix_available: false`. An advisory with a CVE in the CISA Known Exploited Vulnerabilities (KEV) catalog has `known_exploited: true`, `kev_date` (the earliest date one of its CVEs was added to the catalog) and, when the catalog reports its use in ransomware campaigns, `ransomware_used: true`.
+
+Import it with the DefectDojo API (`reimport-scan` in CI, so fixed findings get closed):
+
+```bash
+curl -X POST "$DD_URL/api/v2/reimport-scan/" \
+  -H "Authorization: Token $DD_TOKEN" \
+  -F scan_type="Generic Findings Import" \
+  -F product_name="my-app" -F engagement_name="CI" -F auto_create_context=true \
+  -F file=@findings.json
+```
+
+### CycloneDX
+
+```bash
+secdb audit sbom --file bom.json --output=cyclonedx > vdr.json
+```
+
+Writes a [CycloneDX](https://cyclonedx.org/) 1.6 vulnerability disclosure report: the affected packages as components (referenced by PURL) and one vulnerability for each advisory, listing its packages in `affects`, with the ZEN SecDB advisory as source, the CVSS ratings, CWEs, description, the solution as recommendation, the CVEs as references (an advisory is one vulnerability, its CVEs are its other ids, so nothing is counted twice) and the advisory links. Tools that read CycloneDX vulnerabilities, such as DefectDojo ("CycloneDX Scan"), can import it.
+
+Each vulnerability carries an `analysis`. It applies to all the packages in `affects`, so when they differ (an ignore rule for one package only, a fix missing for one) the advisory appears once for each analysis:
+
+| Finding | `state` | `response` | `detail` |
+|---|---|---|---|
+| Accepted in the ignore file | `exploitable` | `will_not_fix` | the rule's reason |
+| No fix available (with `--show-unfixed`) | `in_triage` | `can_not_fix` | |
+| Any other | `in_triage` | | |
+
+An ignore rule accepts a risk, it doesn't say the package isn't affected, so it is not `not_affected`.
+
+CycloneDX has no field for the CISA KEV catalog: each CVE of the advisory in the catalog adds a `secdb:cisa_kev` property (its value is the CVE) and a link to the CVE's entry in the catalog among the `advisories`.
 
 ### Accepted risks (.secdbignore)
 

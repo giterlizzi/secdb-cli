@@ -63,6 +63,11 @@ var purlAuditCmd = &cobra.Command{
 		and "audit manifest" point at the audited file). A finding accepted by
 		--ignore-file stays in the report as a suppressed result (kind: external,
 		status: accepted), so Code Scanning doesn't open an alert for it.
+
+		--output=defectdojo writes the findings for a DefectDojo import (Generic
+		Findings Import), --output=cyclonedx a CycloneDX 1.6 vulnerability
+		report. Both mark the advisories with a CVE in the CISA KEV catalog,
+		which the json and yaml output list in each advisory's cisa_kev.
 	`),
 	Args: cobra.ArbitraryArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {

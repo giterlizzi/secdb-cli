@@ -9,6 +9,7 @@ import (
 	"maps"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/giterlizzi/secdb-cli/internal/client"
 )
@@ -22,24 +23,47 @@ type PackageResult struct {
 	MaxSeverity   string   `json:"max_severity"`
 }
 
-// AdvisoryResult is the per-advisory shaping (--view=details, SARIF, CSV), with
-// the packages it affects and ignore/unfixed annotations.
+// AdvisoryResult is the per-advisory shaping (--view=details, SARIF, CSV,
+// DefectDojo, CycloneDX), with the packages it affects and ignore/unfixed
+// annotations.
 type AdvisoryResult struct {
 	ID           string
 	Title        string
 	Summary      string
 	Description  string
+	Solution     string
+	Published    time.Time
 	Severity     string
 	Packages     []string
 	PURLs        []string
 	CVEs         []string
 	CWEs         []string
 	CVSSScore    float64
+	CVSS         []CVSS
 	URL          string
+	References   []string
 	Ignored      bool
 	IgnoreReason string
 	IgnoredPURLs map[string]string
 	Unfixed      bool
+	UnfixedPURLs map[string]bool
+	KEV          []KEV
+}
+
+// KEV is one of the advisory's CVEs in the CISA Known Exploited
+// Vulnerabilities catalog. Ransomware is the catalog's "Known" or "Unknown".
+type KEV struct {
+	CVE        string
+	Added      time.Time
+	Due        time.Time
+	Ransomware string
+}
+
+// CVSS is one CVSS score of an advisory, e.g. {3.1, 9.8, "CVSS:3.1/AV:N/..."}.
+type CVSS struct {
+	Version float64
+	Score   float64
+	Vector  string
 }
 
 // Result is an audit shaped for every output, computed once by Analyze: the
@@ -258,6 +282,12 @@ func (a *AdvisoryResult) addPackage(r client.AuditItem, adv client.Advisory, unf
 	a.Packages = append(a.Packages, r.Package)
 	a.PURLs = append(a.PURLs, r.PURL)
 	a.Unfixed = a.Unfixed || unfixed
+	if unfixed {
+		if a.UnfixedPURLs == nil {
+			a.UnfixedPURLs = make(map[string]bool)
+		}
+		a.UnfixedPURLs[r.PURL] = true
+	}
 
 	if ignored, reason := ignoreFile.IsIgnored(adv.ID, adv.CVEs, r.PURL); ignored {
 		if a.IgnoredPURLs == nil {
@@ -274,12 +304,47 @@ func newAdvisoryResult(adv client.Advisory) *AdvisoryResult {
 		Title:       adv.Title,
 		Summary:     adv.Summary,
 		Description: adv.Description,
+		Solution:    adv.Solution,
+		Published:   adv.Published.Time,
 		URL:         adv.URL,
+		References:  referenceURLs(adv),
 		Severity:    NormalizeSeverity(adv.Severity),
 		CVEs:        adv.CVEs,
 		CWEs:        cweIDs(adv),
 		CVSSScore:   latestCVSSScore(adv),
+		CVSS:        cvssScores(adv),
+		KEV:         kevEntries(adv),
 	}
+}
+
+// kevEntries returns the advisory's CISA KEV entries, in the API order.
+func kevEntries(adv client.Advisory) []KEV {
+	var out []KEV
+	for _, k := range adv.CISAKEV {
+		out = append(out, KEV{CVE: k.CVEID, Added: k.AddedDate.Time, Due: k.DueDate.Time, Ransomware: k.KnownRansomware})
+	}
+	return out
+}
+
+// cvssScores returns the advisory's CVSS scores, in the API order.
+func cvssScores(adv client.Advisory) []CVSS {
+	out := make([]CVSS, 0, len(adv.CVSS))
+	for _, c := range adv.CVSS {
+		out = append(out, CVSS{Version: c.Version, Score: c.BaseScore, Vector: c.VectorString})
+	}
+	return out
+}
+
+// referenceURLs returns the URLs of the advisory's references, de-duplicated,
+// in the API order.
+func referenceURLs(adv client.Advisory) []string {
+	var out []string
+	for _, r := range adv.References {
+		if r.URL != "" && !slices.Contains(out, r.URL) {
+			out = append(out, r.URL)
+		}
+	}
+	return out
 }
 
 // sortAdvisories orders the advisories most severe first (then higher CVSS,
@@ -306,6 +371,12 @@ func (a AdvisoryResult) IgnoredFor(purl string) (bool, string) {
 		return true, a.IgnoreReason
 	}
 	return false, ""
+}
+
+// UnfixedFor reports whether the advisory has no fix available for purl. Only
+// set with --show-unfixed: otherwise such an advisory is hidden.
+func (a AdvisoryResult) UnfixedFor(purl string) bool {
+	return a.UnfixedPURLs[purl]
 }
 
 // ignoredForAll reports whether every affected package has an ignore match.

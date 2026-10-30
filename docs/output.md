@@ -11,6 +11,8 @@
 | `html` | Like `template`, but executed with `html/template`, which escapes the values for HTML |
 | `sarif` | SARIF 2.1.0, `audit` commands only (see [Auditing](audit.md#sarif)) |
 | `csv` | One row per advisory, `audit` commands only (see [Auditing](audit.md#csv)) |
+| `defectdojo` | DefectDojo Generic Findings Import, `audit` commands only (see [Auditing](audit.md#defectdojo)) |
+| `cyclonedx` | CycloneDX 1.6 vulnerability report, `audit` commands only (see [Auditing](audit.md#cyclonedx)) |
 
 ```bash
 secdb cve CVE-2021-44228 -o json
@@ -38,6 +40,9 @@ secdb search log4shell --jq '.hits[].id'
 
 # The date a CVE entered the CISA KEV catalog
 secdb cve CVE-2021-44228 --jq '.cisa_kev.added_date // "not in KEV"'
+
+# The advisories of an audit with a CVE in the CISA KEV catalog
+secdb audit purl pkg:maven/org.apache.logging.log4j/log4j-core@2.14.1 --jq '.[].advisories[] | select(.cisa_kev | length > 0) | .id'
 
 # The advisories of an audit, as severity and id
 secdb audit purl pkg:npm/lodash@4.17.20 --jq '.[].advisories[] | "\(.severity)\t\(.id)"'

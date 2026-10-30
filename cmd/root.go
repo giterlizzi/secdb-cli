@@ -72,7 +72,7 @@ func (g *globalOptions) addFlags(cmd *cobra.Command) {
 		"ZEN SecDB web GUI URL for the links in the output (default: https://secdb.nttzen.cloud/, even with --base-url)")
 
 	cmd.PersistentFlags().StringVarP(&g.output, "output", "o", "text",
-		"Output format: text, json, yaml, template, html, sarif, csv (sarif/csv: audit only)")
+		"Output format: text, json, yaml, template, html, sarif, csv, defectdojo, cyclonedx (the last four: audit only)")
 
 	cmd.PersistentFlags().StringVar(&g.template, "template", "",
 		"Inline Go Template, with --output=template or --output=html")
@@ -107,14 +107,15 @@ func (g *globalOptions) validate(cmd *cobra.Command) error {
 	}
 
 	switch g.output {
-	case "json", "yaml", "text", "template", "html", "sarif", "csv":
+	case "json", "yaml", "text", "template", "html":
+	case "sarif", "csv", "defectdojo", "cyclonedx":
+		// These have the advisory shape only the audit subcommands produce, so
+		// reject them up front elsewhere instead of failing after the API call.
+		if cmd.Parent() != auditCmd {
+			return fmt.Errorf("--output=%s is only supported by the audit commands", g.output)
+		}
 	default:
-		return fmt.Errorf("invalid --output: %s (want json|yaml|text|html|template|sarif|csv)", g.output)
-	}
-	// sarif/csv have the advisory shape only the audit subcommands produce, so
-	// reject them up front elsewhere instead of failing after the API call.
-	if (g.output == "sarif" || g.output == "csv") && cmd.Parent() != auditCmd {
-		return fmt.Errorf("--output=%s is only supported by the audit commands", g.output)
+		return fmt.Errorf("invalid --output: %s (want json|yaml|text|html|template|sarif|csv|defectdojo|cyclonedx)", g.output)
 	}
 
 	u, err := client.ValidateBaseURL(g.baseURL)

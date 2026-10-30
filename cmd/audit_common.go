@@ -216,6 +216,14 @@ func writeAuditOutput(res audit.Result, opts *auditOptions, webURL string, targe
 		})
 	case "csv":
 		return output.WriteCSV(os.Stdout, res.Advisories)
+	case "defectdojo":
+		return output.WriteDefectDojo(os.Stdout, res.Advisories, output.DefectDojoOptions{
+			WebURL:  webURL,
+			File:    target.sarifFile,
+			Sources: target.sarifSources,
+		})
+	case "cyclonedx":
+		return output.WriteCycloneDX(os.Stdout, res.Advisories, output.CycloneDXOptions{WebURL: webURL})
 	default:
 		if err := output.Render(os.Stdout, res.Items, output.Format(global.output), global.outputOptions()); err != nil {
 			return fmt.Errorf("failed to render output: %w", err)

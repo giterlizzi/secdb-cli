@@ -71,7 +71,7 @@ Full-text search across CVEs, CWEs, advisories, NASL plugins and ExploitDB entri
 
 ### Output formats
 
-`-o` / `--output` selects the format: `text` (the default Markdown report), `json`, `yaml`, `template` and `html` (your own Go templates), and `sarif` and `csv` for the `audit` commands.
+`-o` / `--output` selects the format: `text` (the default Markdown report), `json`, `yaml`, `template` and `html` (your own Go templates), and `sarif`, `csv`, `defectdojo` and `cyclonedx` for the `audit` commands.
 
 ```bash
 secdb cve CVE-2021-44228 -o json
@@ -100,9 +100,13 @@ secdb audit docker --image debian:12
 
 # CI: fail on high or critical, export SARIF for GitHub Code Scanning
 secdb audit sbom --file bom.json --fail-on=high --output=sarif > results.sarif
+
+# Findings for a DefectDojo import, or a CycloneDX vulnerability report
+secdb audit manifest --file go.mod --output=defectdojo > findings.json
+secdb audit sbom --file bom.json --output=cyclonedx > vdr.json
 ```
 
-All the `audit` commands take the same options: `--view summary|details`, `--fail-on`, accepted risks in a `.secdbignore` file, `--show-unfixed`, SARIF and CSV output, and [notifications](docs/notifications.md). [Auditing](docs/audit.md) covers each command, the supported manifests and distributions.
+All the `audit` commands take the same options: `--view summary|details`, `--fail-on`, accepted risks in a `.secdbignore` file, `--show-unfixed`, SARIF, CSV, DefectDojo and CycloneDX output, and [notifications](docs/notifications.md). [Auditing](docs/audit.md) covers each command, the supported manifests and distributions.
 
 ### Editor integration (Language Server)
 

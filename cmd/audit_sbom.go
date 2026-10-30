@@ -45,7 +45,8 @@ var sbomAuditCmd = &cobra.Command{
 		It supersedes the deprecated "audit purl --sbom": the PURLs are
 		collected from the BOM's components (recursively), then shaped and
 		rendered exactly like "audit purl" (--view, --fail-on, --ignore-file,
-		--show-unfixed and --output=sarif/csv all behave the same way).
+		--show-unfixed and --output=sarif/csv/defectdojo/cyclonedx all behave the
+		same way).
 	`),
 	Args: cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
